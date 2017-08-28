@@ -6,4 +6,4 @@ Queueing System Simulator
     from qss import QSS
 
     queueingsystem = QSS(service_rate, num_nodes)
-    queueingsystem.run(arrival_timestamps, time_limit)
+    queueingsystem.run(arrival_rate, time_limit)
