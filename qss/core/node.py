@@ -17,7 +17,7 @@ import math
 import random
 
 
-def random_generator(rate):
+def get_random(rate):
     return (-1./rate) * math.log(1. - random.random())
 
 
@@ -48,7 +48,7 @@ class ServiceNode(object):
         @return: Processing time.
         @rtype: float
         """
-        return random_generator(rate=self._service_rate)
+        return get_random(rate=self._service_rate)
 
     @property
     def release_timestamp(self):

@@ -27,8 +27,22 @@ ServiceState = EnumTypes(
 )
 
 
-def random_generator(rate):
-    return (-1/rate) * math.log(1 - random.random())
+def random_generator(rate, number=None):
+    """
+    Yield randomly generated values.
+
+    @param rate: Rate value (e.g., arrival rate).
+    @type rate: float
+    @param number: Number of generated elements (None -> infinite elements).
+    @type: number: int/None
+    @return: Random value.
+    @rtype: float
+    """
+    _flag = not bool(number)
+    while _flag or number:
+        yield (-1/rate) * math.log(1 - random.random())
+        if number:
+            number -= 1
 
 
 class QSS(object):
@@ -49,7 +63,9 @@ class QSS(object):
         self.__current_state = None
         self.__current_time = 0.
 
-        self.__arrival_timestamps = []
+        self.__arrival_generator = None
+        self.__arrival_timestamp = 0.
+
         self.__queue = ServiceQueue(queue_limit)
 
         self.__output = []
@@ -79,34 +95,27 @@ class QSS(object):
         """
         return self.__trace
 
-    @property
-    def next_arrival_time(self):
+    def __next_arrival_timestamp(self):
         """
-        Get the next timestamp when the new job arrives.
-
-        @return: Job arrival timestamp.
-        @rtype: float
+        Define the next timestamp when the new job arrives.
         """
-        output = 0.
-
-        if self.__arrival_timestamps:
-            output = self.__arrival_timestamps[0]
-
-        return output
+        try:
+            self.__arrival_timestamp += self.__arrival_generator.next()
+        except StopIteration:
+            self.__arrival_timestamp = 0.
 
     def __next_timestamp(self):
         """
-        Set the next timestamp based on the closest action that is scheduled.
+        Define the next timestamp based on the closest action that is scheduled.
         """
-        next_arrival_timestamp = self.next_arrival_time
         next_release_timestamp = self.__service_manager.next_release_timestamp
 
-        if not next_arrival_timestamp and not next_release_timestamp:
+        if not self.__arrival_timestamp and not next_release_timestamp:
             self.__current_state = ServiceState.Stop
 
         elif (not next_release_timestamp or
-                next_release_timestamp > next_arrival_timestamp > 0.):
-            self.__current_time = next_arrival_timestamp
+                next_release_timestamp > self.__arrival_timestamp > 0.):
+            self.__current_time = self.__arrival_timestamp
             self.__current_state = ServiceState.Arrival
 
         elif next_release_timestamp:
@@ -137,8 +146,8 @@ class QSS(object):
         """
         Get new jobs (based on scheduled arrival time) and put to the queue.
         """
-        self.__queue.add(
-            JobSpecs(arrival_timestamp=self.__arrival_timestamps.pop(0)))
+        self.__queue.add(JobSpecs(arrival_timestamp=self.__arrival_timestamp))
+        self.__next_arrival_timestamp()
 
         # track the queue if only all nodes are busy
         if self.__service_manager.all_locked:
@@ -181,6 +190,14 @@ class QSS(object):
                              self.__queue.length,
                              self.__service_manager.num_locked_nodes))
 
+    def __reset(self):
+        """
+        Reset parameters.
+        """
+        self.__current_state = None
+        self.__current_time = 0.
+        self.__arrival_timestamp = 0.
+
     def print_stats(self):
         """
         Print statistics.
@@ -202,25 +219,35 @@ class QSS(object):
             print 'Drop rate: {0}'.format(
                 self.__queue.num_dropped / len(self.output_channel))
 
-    def run(self, arrival_times, time_limit):
+    def run(self, arrival_rate=None, arrival_generator=None,
+            num_jobs=None, time_limit=None):
         """
         Run simulation.
 
-        @param arrival_times: List of jobs' arrival times (random values).
-        @type arrival_times: list
+        @param arrival_rate: Arrival rate for jobs.
+        @type arrival_rate: float/None
+        @param arrival_generator: Generator for random arrival times.
+        @type arrival_generator: generator/None
+        @param num_jobs: Number of arrival jobs.
+        @type num_jobs: int/None
         @param time_limit: The maximum timestamp (until simulation is done).
-        @type time_limit: float
+        @type time_limit: float/None
         """
-        if not arrival_times:
-            raise Exception("Sequence of jobs' times is not set.")
+        self.__reset()
 
-        # create arrival timeline (timestamps when new job arrives)
-        _current_timestamp = 0.
-        for arrival_time in arrival_times:
-            _current_timestamp += arrival_time
-            self.__arrival_timestamps.append(_current_timestamp)
+        if not arrival_rate and not arrival_generator:
+            raise Exception('Arrival parameters are not set.')
+        elif arrival_generator:
+            self.__arrival_generator = arrival_generator
+        else:
+            self.__arrival_generator = random_generator(rate=arrival_rate,
+                                                        number=num_jobs)
 
-        while self.__current_time < time_limit:
+        if not num_jobs and not time_limit:
+            raise Exception('Limits are not set.')
+
+        self.__next_arrival_timestamp()
+        while num_jobs or (time_limit and self.__current_time < time_limit):
             status_code = self.__next_action()
             if status_code:
                 break
