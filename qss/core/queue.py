@@ -58,6 +58,13 @@ class ServiceQueue(object):
         """
         return self.__num_dropped
 
+    def reset(self):
+        """
+        Reset parameters.
+        """
+        del self.__data[:]
+        self.__num_dropped = 0.
+
     def add(self, element):
         """
         Add element to the queue.

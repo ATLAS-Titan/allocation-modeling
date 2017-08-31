@@ -36,8 +36,8 @@ class ServiceNode(object):
         """
         self._service_rate = service_rate
         self._output_channel = output_channel
-        self._job = None
 
+        self.__job = None
         self.__locked = False
 
     @property
@@ -58,8 +58,15 @@ class ServiceNode(object):
         @return: Job released timestamp.
         @rtype: float
         """
-        if self._job is not None:
-            return self._job.release_timestamp
+        if self.__job is not None:
+            return self.__job.release_timestamp
+
+    def reset(self):
+        """
+        Reset parameters.
+        """
+        self.__job = None
+        self.__locked = False
 
     def lock(self, current_time, job):
         """
@@ -70,20 +77,19 @@ class ServiceNode(object):
         @param job: Job object.
         @type job: qss.core.job.JobSpecs
         """
+        self.__job = job
+        self.__job.submission_timestamp = current_time
+        self.__job.release_timestamp = current_time + self._service_time
         self.__locked = True
-
-        self._job = job
-        self._job.submission_timestamp = current_time
-        self._job.release_timestamp = current_time + self._service_time
 
     def unlock(self):
         """
         Unlock the service node after job processing is done.
         """
-        self.__locked = False
+        self._output_channel.append(self.__job)
 
-        self._output_channel.append(self._job)
-        self._job = None
+        self.__job = None
+        self.__locked = False
 
     @property
     def is_locked(self):
@@ -156,6 +162,13 @@ class ServiceManager(object):
         for node in self.__nodes:
             if node.release_timestamp == current_time:
                 node.unlock()
+
+    def reset(self):
+        """
+        Reset service nodes.
+        """
+        for node in self.__nodes:
+            node.reset()
 
     @property
     def all_locked(self):

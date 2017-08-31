@@ -40,7 +40,7 @@ def random_generator(rate, number=None):
     """
     _flag = not bool(number)
     while _flag or number:
-        yield (-1/rate) * math.log(1 - random.random())
+        yield (-1./rate) * math.log(1. - random.random())
         if number:
             number -= 1
 
@@ -197,6 +197,12 @@ class QSS(object):
         self.__current_state = None
         self.__current_time = 0.
         self.__arrival_timestamp = 0.
+
+        self.__queue.reset()
+        self.__service_manager.reset()
+
+        del self.__output[:]
+        del self.__trace[:]
 
     def print_stats(self):
         """
