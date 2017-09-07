@@ -17,14 +17,15 @@
 import math
 
 from qss import QSS
+from qss.core import stream_generator
 
 
 ARRIVAL_RATE = 22./72
 SERVICE_RATE = 1./3
 NUM_NODES = 4  # M/M/NUM_NODES
 
-TIME_LIMIT = 5000.
-NUM_ATTEMPTS = 100
+TIME_LIMIT = 50000.
+NUM_ATTEMPTS = 1000
 
 
 def p_zero(n, a_rate, s_rate):
@@ -60,23 +61,23 @@ def delay(n, a_rate, s_rate):
 
 if __name__ == '__main__':
 
-    qs = QSS(service_rate=SERVICE_RATE,
-             num_nodes=NUM_NODES)
+    qs = QSS(num_nodes=NUM_NODES)
 
     avg_num_jobs, max_num_jobs = 0., 0
     avg_delay = 0.
     for _ in range(NUM_ATTEMPTS):
-        qs.run(arrival_rate=ARRIVAL_RATE,
-               time_limit=TIME_LIMIT)
-
-        num_jobs_list = map(lambda x: (x[1] + x[2]), qs.trace)
+        qs.run(stream=stream_generator(arrival_rate=ARRIVAL_RATE,
+                                       service_rate=SERVICE_RATE,
+                                       num_jobs=None,
+                                       time_limit=TIME_LIMIT))
 
         avg_num_jobs += qs.get_avg_num_jobs()
-        avg_delay += (reduce(lambda x, y: x + y.delay, qs.output_channel, 0.)
-                      / len(qs.output_channel))
+        avg_delay += qs.get_avg_delay()
 
-        if max_num_jobs < max(num_jobs_list):
-            max_num_jobs = max(num_jobs_list)
+        if qs.trace:
+            new_max_num_jobs = max(map(lambda x: (x[1] + x[2]), qs.trace))
+            if max_num_jobs < new_max_num_jobs:
+                max_num_jobs = new_max_num_jobs
 
     print 'AVG number of jobs: {0} (max: {1}); AVG delay: {2}'.format(
         avg_num_jobs/NUM_ATTEMPTS, max_num_jobs, avg_delay/NUM_ATTEMPTS)

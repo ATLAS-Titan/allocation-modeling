@@ -13,7 +13,7 @@
 # - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
 #
 
-from qss import QSS, random_generator
+from qssbase import QSS, random_generator
 
 
 ARRIVAL_RATE = 10./9
