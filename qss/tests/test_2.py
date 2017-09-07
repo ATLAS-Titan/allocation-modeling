@@ -11,6 +11,7 @@
 #
 # Author(s):
 # - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
+# - Alexey Poyda, <poyda@wdcb.ru>, 2017
 #
 
 import math
@@ -70,8 +71,7 @@ if __name__ == '__main__':
 
         num_jobs_list = map(lambda x: (x[1] + x[2]), qs.trace)
 
-        avg_num_jobs += (reduce(lambda x, y: x + y, num_jobs_list)
-                         / float(len(qs.trace)))
+        avg_num_jobs += qs.get_avg_num_jobs()
         avg_delay += (reduce(lambda x, y: x + y.delay, qs.output_channel, 0.)
                       / len(qs.output_channel))
 

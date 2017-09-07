@@ -11,6 +11,7 @@
 #
 # Author(s):
 # - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
+# - Alexey Poyda, <poyda@wdcb.ru>, 2017
 #
 
 import math
@@ -194,6 +195,40 @@ class QSS(object):
         del self.__output[:]
         del self.__trace[:]
 
+    def get_avg_num_jobs(self):
+        """
+        Get average number of jobs in the system.
+
+        @return: Average number.
+        @rtype: float
+        """
+        output = 0.
+
+        for i in range(0, len(self.__trace) - 1):
+            num_jobs = self.__trace[i][1] + self.__trace[i][2]
+            dt = self.__trace[i + 1][0] - self.__trace[i][0]
+            output += num_jobs * dt
+
+        output = output / (self.__trace[-1][0] - self.__trace[0][0])
+        return output
+
+    def get_avg_len_queue(self):
+        """
+        Get average length of the queue.
+
+        @return: Average number.
+        @rtype: float
+        """
+        output = 0.
+
+        for i in range(0, len(self.__trace) - 1):
+            num_jobs_in_queue = self.__trace[i][1]
+            dt = self.__trace[i + 1][0] - self.__trace[i][0]
+            output += num_jobs_in_queue * dt
+
+        output = output / (self.__trace[-1][0] - self.__trace[0][0])
+        return output
+
     def print_stats(self):
         """
         Print statistics.
@@ -206,14 +241,13 @@ class QSS(object):
             / len(self.output_channel))
 
         print 'AVG number of jobs: {0}; AVG queue length: {1}'.format(
-            reduce(lambda x, y: x + y, map(lambda x: (x[1] + x[2]), self.trace))
-            / float(len(self.trace)),
-            reduce(lambda x, y: x + y, map(lambda x: x[1], self.trace))
-            / float(len(self.trace)))
+            self.get_avg_num_jobs(),
+            self.get_avg_len_queue())
 
         if self.__queue.num_dropped:
             print 'Drop rate: {0}'.format(
-                self.__queue.num_dropped / len(self.output_channel))
+                self.__queue.num_dropped /
+                (self.__queue.num_dropped + len(self.output_channel)))
 
     def run(self, arrival_rate=None, arrival_generator=None,
             num_jobs=None, time_limit=None):
