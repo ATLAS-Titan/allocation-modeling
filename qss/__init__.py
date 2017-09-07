@@ -149,27 +149,19 @@ class QSS(object):
         self.__queue.add(JobSpecs(arrival_timestamp=self.__arrival_timestamp))
         self.__next_arrival_timestamp()
 
-        # track the queue if only all nodes are busy
-        if self.__service_manager.all_locked:
-            self.__trace_update()
+        self.__trace_update()
 
     def __submission(self):
         """
         Get jobs from the queue and submit to the service node.
         """
-        _new_submissions = False
         while (not self.__queue.is_empty
                 and not self.__service_manager.all_locked):
 
             self.__service_manager.run_service_node(
                 current_time=self.__current_time, job=self.__queue.pop())
 
-            if not _new_submissions:
-                _new_submissions = True
-
-        # track the actual submission only
-        if _new_submissions:
-            self.__trace_update()
+        self.__trace_update()
 
     def __completion(self):
         """
@@ -178,9 +170,7 @@ class QSS(object):
         self.__service_manager.release_service_node(
             current_time=self.__current_time)
 
-        # track the completion process if only the queue is empty
-        if self.__queue.is_empty:
-            self.__trace_update()
+        self.__trace_update()
 
     def __trace_update(self):
         """
