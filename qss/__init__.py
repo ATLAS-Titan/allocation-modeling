@@ -267,17 +267,26 @@ class QSS(object):
 
         return output
 
-    def get_avg_delay(self):
+    def get_avg_delay(self, source_label=None):
         """
         Get average job's delay (wait time + service time).
 
+        @param source_label: Source label (make calculations by stream)
+        @type source_label: str/None
         @return: Average number.
         @rtype: float
         """
         output = 0.
 
         if self.__output:
-            output = (reduce(lambda x, y: x + y.delay, self.__output, 0.)
+
+            jobs = []
+            if source_label:
+                jobs = filter(lambda x: x.source_label == source_label,
+                              self.__output)
+
+            output = (reduce(lambda x, y: x + y.delay,
+                             jobs or self.__output, 0.)
                       / len(self.__output))
 
         return output
