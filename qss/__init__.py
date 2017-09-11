@@ -280,14 +280,10 @@ class QSS(object):
 
         if self.__output:
 
-            jobs = []
-            if source_label:
-                jobs = filter(lambda x: x.source_label == source_label,
-                              self.__output)
+            jobs = self.__output if not source_label else filter(
+                lambda x: x.source_label == source_label, self.__output)
 
-            output = (reduce(lambda x, y: x + y.delay,
-                             jobs or self.__output, 0.)
-                      / len(self.__output))
+            output = reduce(lambda x, y: x + y.delay, jobs, 0.) / len(jobs)
 
         return output
 
