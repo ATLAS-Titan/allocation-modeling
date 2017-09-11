@@ -36,7 +36,7 @@ def stream_generator(arrival_rate, execution_rate, num_jobs=None, time_limit=Non
     @param time_limit: The maximum timestamp (until generation is done).
     @type time_limit: float/None
     @return: Job object.
-    @rtype: float
+    @rtype: qss.core.job.Job
     """
     if not num_jobs and not time_limit:
         raise Exception('Limits are not set.')
