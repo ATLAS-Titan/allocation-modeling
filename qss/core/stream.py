@@ -23,7 +23,8 @@ SOURCE_LABEL_DEFAULT = 'main'
 NUM_NODES_DEFAULT = 1
 
 
-def stream_generator(arrival_rate, execution_rate, num_jobs=None, time_limit=None):
+def stream_generator(arrival_rate, execution_rate, num_nodes=None,
+                     source_label=None, num_jobs=None, time_limit=None):
     """
     Yield jobs with randomly generated arrival and service times.
 
@@ -31,6 +32,10 @@ def stream_generator(arrival_rate, execution_rate, num_jobs=None, time_limit=Non
     @type arrival_rate: float
     @param execution_rate: Execution rate for jobs.
     @type execution_rate: float
+    @param num_nodes: Number of nodes per job.
+    @type num_nodes: int/None
+    @param source_label: Name of the job's source.
+    @type source_label: str/None
     @param num_jobs: Number of generated jobs (None -> infinite jobs).
     @type: num_jobs: int/None
     @param time_limit: The maximum timestamp (until generation is done).
@@ -41,6 +46,9 @@ def stream_generator(arrival_rate, execution_rate, num_jobs=None, time_limit=Non
     if not num_jobs and not time_limit:
         raise Exception('Limits are not set.')
 
+    num_nodes_per_job = num_nodes or NUM_NODES_DEFAULT
+    source_label = source_label or SOURCE_LABEL_DEFAULT
+
     def get_random(rate):
         return (-1. / rate) * math.log(1. - random.random())
 
@@ -49,8 +57,8 @@ def stream_generator(arrival_rate, execution_rate, num_jobs=None, time_limit=Non
 
         yield Job(execution_time=get_random(execution_rate),
                   arrival_timestamp=next_arrival_timestamp,
-                  source_label=SOURCE_LABEL_DEFAULT,
-                  num_nodes=NUM_NODES_DEFAULT)
+                  source_label=source_label,
+                  num_nodes=num_nodes_per_job)
 
         next_arrival_timestamp += get_random(arrival_rate)
 
