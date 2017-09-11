@@ -252,12 +252,12 @@ class QSS(object):
         @param stream: Input stream that generates jobs.
         @type stream: generator
         """
-        self.__reset()
-
         if not stream:
             raise Exception('Stream generator is not set.')
-        else:
-            self.__job_generator = stream
+
+        self.__reset()
+
+        self.__job_generator = stream
 
         self.__set_next_arrival_job()
         while True:
