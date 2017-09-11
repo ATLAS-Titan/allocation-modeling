@@ -16,24 +16,27 @@
 
 import math
 
-from qss import QSS
-from qss.core import stream_generator
+from decimal import Decimal
+
+from qss import QSS, stream_generator
 
 
 ARRIVAL_RATE = 22./72
 SERVICE_RATE = 1./3
-NUM_NODES = 4  # M/M/NUM_NODES
+NUM_NODES = 1000  # M/M/NUM_NODES
 
 TIME_LIMIT = 50000.
-NUM_ATTEMPTS = 1000
+NUM_ATTEMPTS = 10
 
 
 def p_zero(n, a_rate, s_rate):
     rho = a_rate / (n * s_rate)
     return (
-        1. / (
-            (((n * rho)**n) / (math.factorial(n) * (1. - rho))) +
-            math.fsum([(((n * rho)**i) / math.factorial(i)) for i in range(n)])
+        Decimal(1) / (
+            (((a_rate / s_rate)**n) / (math.factorial(n) * (Decimal(1) - rho)))
+            + sum([
+                (((a_rate / s_rate)**i) / math.factorial(i)) for i in range(n)
+            ])
         )
     )
 
@@ -42,20 +45,22 @@ def p_q(n, a_rate, s_rate):
     rho = a_rate / (n * s_rate)
     return (
         p_zero(n, a_rate, s_rate) *
-        (((n * rho)**n) / (math.factorial(n) * (1. - rho)))
+        (((a_rate / s_rate)**n) / (math.factorial(n) * (Decimal(1) - rho)))
     )
 
 
 def num_jobs(n, a_rate, s_rate):
     rho = a_rate / (n * s_rate)
     return (
-        ((rho * p_q(n, a_rate, s_rate)) / (1. - rho)) + (n * rho)
+        ((rho * p_q(n, a_rate, s_rate)) / (Decimal(1) - rho))
+        + (a_rate / s_rate)
     )
 
 
 def delay(n, a_rate, s_rate):
     return (
-        ((p_q(n, a_rate, s_rate)) / ((n * s_rate) - a_rate)) + (1. / s_rate)
+        ((p_q(n, a_rate, s_rate)) / ((n * s_rate) - a_rate))
+        + (Decimal(1) / s_rate)
     )
 
 
@@ -67,7 +72,7 @@ if __name__ == '__main__':
     avg_delay = 0.
     for _ in range(NUM_ATTEMPTS):
         qs.run(stream=stream_generator(arrival_rate=ARRIVAL_RATE,
-                                       service_rate=SERVICE_RATE,
+                                       execution_rate=SERVICE_RATE,
                                        num_jobs=None,
                                        time_limit=TIME_LIMIT))
 
@@ -82,5 +87,9 @@ if __name__ == '__main__':
     print 'AVG number of jobs: {0} (max: {1}); AVG delay: {2}'.format(
         avg_num_jobs/NUM_ATTEMPTS, max_num_jobs, avg_delay/NUM_ATTEMPTS)
     print 'based on theory: AVG number of jobs: {0}; AVG delay: {1}'.format(
-        num_jobs(NUM_NODES, ARRIVAL_RATE, SERVICE_RATE),
-        delay(NUM_NODES, ARRIVAL_RATE, SERVICE_RATE))
+        num_jobs(NUM_NODES,
+                 Decimal('{0}'.format(ARRIVAL_RATE)),
+                 Decimal('{0}'.format(SERVICE_RATE))),
+        delay(NUM_NODES,
+              Decimal('{0}'.format(ARRIVAL_RATE)),
+              Decimal('{0}'.format(SERVICE_RATE))))
