@@ -41,8 +41,8 @@ class QSS(object):
         self.__current_state = None
         self.__current_time = 0.
 
-        self.__job_generator = None
-        self.__arrival_job = None
+        self.__job_generators = []
+        self.__job_buffer = []
 
         self.__queue = Queue(queue_limit)
 
@@ -72,21 +72,54 @@ class QSS(object):
         """
         return self.__trace
 
-    def __set_next_arrival_job(self):
+    def __set_next_arrival_job(self, gid):
         """
         Define the next arrival job (by the corresponding generator).
+
+        @param gid: Generator id.
+        @type gid: int
         """
+        next_job_id = len(self.__job_buffer)
+        if gid < next_job_id:
+            pass
+        elif gid == next_job_id and gid < len(self.__job_generators):
+            self.__job_buffer.append(None)
+        else:
+            raise Exception('Generator id is out of limit.')
+
         try:
-            self.__arrival_job = self.__job_generator.next()
+            self.__job_buffer[gid] = self.__job_generators[gid].next()
         except StopIteration:
-            self.__arrival_job = None
+            self.__job_buffer[gid] = None
+
+    def __next_arrival_params(self):
+        """
+        Get parameters of the next arriving job (gid, arrival_timestamp).
+
+        @return: Generator id with corresponding minimum (arrival) timestamp.
+        @rtype: tuple
+        """
+        sorted_params = sorted([(i, j.arrival_timestamp)
+                                for i, j in enumerate(self.__job_buffer) if j],
+                               key=lambda x: x[1])
+
+        output = (None, 0.) if not sorted_params else sorted_params[0]
+        return output
+
+    def __next_arrival_timestamp(self):
+        """
+        Get the closest (to the current time) timestamp.
+
+        @return: Minimum (arrival) timestamp.
+        @rtype: float
+        """
+        return self.__next_arrival_params()[1]
 
     def __set_next_timestamp(self):
         """
         Define the next timestamp based on the closest action that is scheduled.
         """
-        next_arrival_timestamp = (0. if not self.__arrival_job
-                                  else self.__arrival_job.arrival_timestamp)
+        next_arrival_timestamp = self.__next_arrival_timestamp()
         next_release_timestamp = self.__service_manager.next_release_timestamp
 
         if not next_arrival_timestamp and not next_release_timestamp:
@@ -129,8 +162,9 @@ class QSS(object):
         """
         Get new (generated) job and put it to the queue.
         """
-        self.__queue.add(self.__arrival_job)
-        self.__set_next_arrival_job()
+        gid = self.__next_arrival_params()[0]
+        self.__queue.add(self.__job_buffer[gid])
+        self.__set_next_arrival_job(gid=gid)
 
     def __submission(self):
         """
@@ -140,10 +174,12 @@ class QSS(object):
                 and not self.__service_manager.all_nodes_busy):
 
             exec_code = self.__service_manager.start_job_processing(
-                current_time=self.__current_time, job=self.__queue.pop())
+                current_time=self.__current_time, job=self.__queue.show_next())
 
             if exec_code:
                 break
+
+            self.__queue.pop()
 
     def __completion(self):
         """
@@ -167,7 +203,7 @@ class QSS(object):
         self.__current_state = None
         self.__current_time = 0.
 
-        self.__arrival_job = None
+        del self.__job_buffer[:]
 
         self.__queue.reset()
         self.__service_manager.reset()
@@ -245,21 +281,22 @@ class QSS(object):
                 self.__queue.num_dropped /
                 (self.__queue.num_dropped + len(self.output_channel)))
 
-    def run(self, stream):
+    def run(self, streams):
         """
         Run simulation.
 
-        @param stream: Input stream that generates jobs.
-        @type stream: generator
+        @param streams: Input streams that generate jobs.
+        @type streams: list of generators
         """
-        if not stream:
-            raise Exception('Stream generator is not set.')
+        if not streams:
+            raise Exception('Stream generators are not set.')
 
         self.__reset()
 
-        self.__job_generator = stream
+        self.__job_generators = streams
+        for gid in range(len(self.__job_generators)):
+            self.__set_next_arrival_job(gid=gid)
 
-        self.__set_next_arrival_job()
         while True:
             status_code = self.__next_action()
             if status_code:
