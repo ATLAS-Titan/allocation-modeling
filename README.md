@@ -11,8 +11,14 @@ Basic implementation of Queueing System Simulator
 ## QSS
 Advanced implementation of Queueing System Simulator
 
-    from qss import QSS
-    from qss.core import stream_generator
+    from qss import QSS, stream_generator
     
     queueingsystem = QSS(num_nodes)
-    queueingsystem.run(stream=stream_generator(arrival_rate, service_rate, num_jobs, time_limit))
+    queueingsystem.run(streams=[
+        stream_generator(arrival_rate, 
+                         execution_rate, 
+                         num_nodes_per_job, 
+                         source_label, 
+                         num_generated_jobs, 
+                         time_limit)
+    ])
