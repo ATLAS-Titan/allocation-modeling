@@ -203,6 +203,16 @@ class ServiceManager(object):
         return sum(map(lambda x: len(x), self.__busy_node_groups))
 
     @property
+    def num_processing_jobs(self):
+        """
+        Get the number of processing jobs.
+
+        @return: Number of jobs in the service manager.
+        @rtype: int
+        """
+        return len(self.__busy_node_groups)
+
+    @property
     def num_idle_nodes(self):
         """
         Get the number of idle service nodes (unlocked nodes).

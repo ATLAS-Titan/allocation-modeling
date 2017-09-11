@@ -19,9 +19,9 @@ from qss import QSS, stream_generator
 
 ARRIVAL_RATE = 22./72
 SERVICE_RATE = 1./3
-NUM_NODES = 1000  # M/M/NUM_NODES
+NUM_NODES = 100  # M/M/NUM_NODES
 
-TIME_LIMIT = 10.
+TIME_LIMIT = 100.
 NUM_ATTEMPTS = 2
 
 
@@ -42,7 +42,7 @@ if __name__ == '__main__':
                              time_limit=TIME_LIMIT),
             stream_generator(arrival_rate=ARRIVAL_RATE/2,
                              execution_rate=SERVICE_RATE,
-                             num_nodes=1000,
+                             num_nodes=100,
                              source_label='main',
                              num_jobs=None,
                              time_limit=TIME_LIMIT)

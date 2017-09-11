@@ -24,6 +24,12 @@ ServiceState = EnumTypes(
     ('Stop', 2)
 )
 
+ActionCode = EnumTypes(
+    ('Arrival', 'a'),
+    ('Submission', 's'),
+    ('Completion', 'c'),
+)
+
 
 class QSS(object):
 
@@ -146,12 +152,10 @@ class QSS(object):
         if self.__current_state == ServiceState.Arrival:
             self.__arrival()
             self.__submission()
-            self.__trace_update()
 
         elif self.__current_state == ServiceState.Completion:
             self.__completion()
             self.__submission()
-            self.__trace_update()
 
         elif self.__current_state == ServiceState.Stop:
             output = 1
@@ -166,10 +170,13 @@ class QSS(object):
         self.__queue.add(self.__job_buffer[gid])
         self.__set_next_arrival_job(gid=gid)
 
+        self.__trace_update(action_code=ActionCode.Arrival)
+
     def __submission(self):
         """
         Get jobs from the queue and submit them to idle service nodes.
         """
+        had_submission = False
         while (not self.__queue.is_empty
                 and not self.__service_manager.all_nodes_busy):
 
@@ -180,6 +187,11 @@ class QSS(object):
                 break
 
             self.__queue.pop()
+            if not had_submission:
+                had_submission = True
+
+        if had_submission:
+            self.__trace_update(action_code=ActionCode.Submission)
 
     def __completion(self):
         """
@@ -188,13 +200,19 @@ class QSS(object):
         self.__service_manager.stop_job_processing(
             current_time=self.__current_time)
 
-    def __trace_update(self):
+        self.__trace_update(action_code=ActionCode.Completion)
+
+    def __trace_update(self, action_code=None):
         """
         Update tracing data.
+
+        @param action_code: Code of the action.
+        @type action_code: str/None
         """
         self.__trace.append((self.__current_time,
                              self.__queue.length,
-                             self.__service_manager.num_busy_nodes))
+                             self.__service_manager.num_processing_jobs,
+                             action_code or '-'))
 
     def __reset(self):
         """
