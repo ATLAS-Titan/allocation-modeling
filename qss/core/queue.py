@@ -77,6 +77,15 @@ class Queue(object):
         elif self.__limit:
             self.__num_dropped += 1
 
+    def show_next(self):
+        """
+        Show next element without removing it from the queue.
+
+        @return: Queue element.
+        @rtype: -
+        """
+        return self.__data[0]
+
     def pop(self):
         """
         Get (remove and return) element from the queue.
