@@ -13,11 +13,17 @@
 # - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
 #
 
-from .utils import EnumTypes
+from ..utils import EnumTypes
 
 
-StreamName = EnumTypes(
-    ('Default', 'default'),
-    ('External', 'external'),
-    ('Main', 'main')
+ActionCode = EnumTypes(
+    ('Arrival', 'a'),
+    ('Submission', 's'),
+    ('Completion', 'c'),
+)
+
+ServiceState = EnumTypes(
+    ('Arrival', 0),
+    ('Completion', 1),
+    ('Stop', 2)
 )

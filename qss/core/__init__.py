@@ -13,5 +13,3 @@
 from .job import Job
 from .node import ServiceManager
 from .queue import Queue
-
-from .stream import stream_generator
