@@ -16,6 +16,8 @@
 
 from qss import QSS, stream_generator
 
+from qss.constants import StreamName
+
 
 ARRIVAL_RATE = 22./72
 SERVICE_RATE = 1./3
@@ -27,7 +29,7 @@ NUM_ATTEMPTS = 2
 
 if __name__ == '__main__':
 
-    qs = QSS(num_nodes=NUM_NODES)
+    qs = QSS(num_nodes=NUM_NODES, output_file='qss_output.csv')
 
     max_num_jobs, avg_num_jobs, avg_delay = 0, 0., 0.
 
@@ -37,13 +39,13 @@ if __name__ == '__main__':
             stream_generator(arrival_rate=ARRIVAL_RATE/2,
                              execution_rate=SERVICE_RATE,
                              num_nodes=1,
-                             source_label='external',
+                             source_label=StreamName.External,
                              num_jobs=None,
                              time_limit=TIME_LIMIT),
             stream_generator(arrival_rate=ARRIVAL_RATE/2,
                              execution_rate=SERVICE_RATE,
                              num_nodes=100,
-                             source_label='main',
+                             source_label=StreamName.Main,
                              num_jobs=None,
                              time_limit=TIME_LIMIT)
         ])
