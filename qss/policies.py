@@ -15,6 +15,7 @@
 
 from .constants import StreamName
 
+
 QUEUE_POLICY = {
     'limit': {
         StreamName.Main: 4

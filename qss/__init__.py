@@ -14,7 +14,7 @@
 # - Alexey Poyda, <poyda@wdcb.ru>, 2017
 #
 
-from .core.stream import stream_generator
+from .stream import stream_generator
 
 from .core import Queue, ServiceManager
 from .core.constants import ActionCode, ServiceState
