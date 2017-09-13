@@ -16,10 +16,12 @@
 import math
 import random
 
+from ..constants import StreamName
+
 from .job import Job
 
 
-SOURCE_LABEL_DEFAULT = 'main'
+SOURCE_LABEL_DEFAULT = StreamName.Default
 NUM_NODES_DEFAULT = 1
 
 
