@@ -27,3 +27,9 @@ ServiceState = EnumTypes(
     ('Completion', 1),
     ('Stop', 2)
 )
+
+StreamName = EnumTypes(
+    ('Default', 'default'),
+    ('External', 'external'),
+    ('Main', 'main')
+)
