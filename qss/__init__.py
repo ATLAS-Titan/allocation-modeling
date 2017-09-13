@@ -14,28 +14,15 @@
 # - Alexey Poyda, <poyda@wdcb.ru>, 2017
 #
 
+from .constants import ActionCode, ServiceState
 from .core import Queue, ServiceManager, stream_generator
-from .utils import EnumTypes
-
-
-ServiceState = EnumTypes(
-    ('Arrival', 0),
-    ('Completion', 1),
-    ('Stop', 2)
-)
-
-ActionCode = EnumTypes(
-    ('Arrival', 'a'),
-    ('Submission', 's'),
-    ('Completion', 'c'),
-)
 
 
 class QSS(object):
 
     """Queueing System Simulator."""
 
-    def __init__(self, num_nodes, queue_limit=None):
+    def __init__(self, num_nodes, queue_limit=None, output_file=None):
         """
         Initialization.
 
@@ -43,6 +30,8 @@ class QSS(object):
         @type num_nodes: int
         @param queue_limit: Maximum number of elements (jobs) in queue.
         @type queue_limit: int/None
+        @param output_file: Name of file for output (addon for output_channel).
+        @type output_file: str/None
         """
         self.__current_state = None
         self.__current_time = 0.
@@ -56,6 +45,7 @@ class QSS(object):
         self.__service_manager = ServiceManager(num_nodes=num_nodes,
                                                 output_channel=self.__output)
 
+        self.__output_file = output_file
         self.__trace = []
 
     @property
@@ -200,6 +190,17 @@ class QSS(object):
         self.__service_manager.stop_job_processing(
             current_time=self.__current_time)
 
+        if self.__output_file and self.__output:
+            job = self.__output[-1]
+            with open(self.__output_file, 'a') as f:
+                f.write(','.join([
+                    str(job.arrival_timestamp),
+                    str(job.submission_timestamp),
+                    str(job.release_timestamp),
+                    str(job.num_nodes),
+                    job.source_label
+                ]) + '\n')
+
         self.__trace_update(action_code=ActionCode.Completion)
 
     def __trace_update(self, action_code=None):
@@ -304,15 +305,20 @@ class QSS(object):
                 self.__queue.num_dropped /
                 (self.__queue.num_dropped + len(self.output_channel)))
 
-    def run(self, streams):
+    def run(self, streams, output_file=None):
         """
         Run simulation.
 
         @param streams: Input streams that generate jobs.
         @type streams: list of generators
+        @param output_file: Name of file for output per run.
+        @type output_file: str/None
         """
         if not streams:
             raise Exception('Stream generators are not set.')
+
+        if output_file:
+            self.__output_file = output_file
 
         self.__reset()
 
