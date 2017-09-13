@@ -39,7 +39,7 @@ class QSS(object):
         self.__job_generators = []
         self.__job_buffer = []
 
-        self.__queue = Queue(queue_limit)
+        self.__queue = Queue(total_limit=queue_limit)
 
         self.__output = []
         self.__service_manager = ServiceManager(num_nodes=num_nodes,
@@ -301,9 +301,12 @@ class QSS(object):
         print 'AVG delay: {0}'.format(self.get_avg_delay())
 
         if self.__queue.num_dropped:
-            print 'Drop rate: {0}'.format(
-                self.__queue.num_dropped /
+            print 'Queue drop rate: {0}'.format(
+                float(self.__queue.num_dropped) /
                 (self.__queue.num_dropped + len(self.output_channel)))
+            drop_pairs = self.__queue.get_num_dropped_with_labels()
+            if len(drop_pairs) > 1:
+                print 'Dropped jobs in queue (by label): {0}'.format(drop_pairs)
 
     def run(self, streams, output_file=None):
         """

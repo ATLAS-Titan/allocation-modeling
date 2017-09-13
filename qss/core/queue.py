@@ -13,30 +13,38 @@
 # - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
 #
 
+try:
+    from ..policies import QUEUE_POLICY
+except ImportError:
+    QUEUE_POLICY = {}
+
 
 class Queue(object):
 
-    def __init__(self, limit=None):
+    def __init__(self, policy=None, total_limit=None):
         """
         Initialization.
 
-        @param limit: Maximum number of elements in queue.
-        @type limit: int/None
+        @param policy: Policy for queue behaviour.
+        @type policy: dict/None
+        @param total_limit: Maximum number of jobs in the queue.
+        @type total_limit: int/None
         """
         self.__data = []
-        self.__limit = limit
 
-        self.__num_dropped = 0.
+        policy = policy or QUEUE_POLICY
 
-    @property
-    def length(self):
-        """
-        Get the number of elements in queue.
+        self.__limit_policy = policy.get('limit', {})
+        if total_limit:
+            self.__limit_policy['_total'] = total_limit
 
-        @return: Number of elements.
-        @rtype: int
-        """
-        return len(self.__data)
+        self.__num_labeled_elements = {}
+        for label in policy.get('limit', {}):
+            self.__num_labeled_elements[label] = 0
+
+        self.__num_dropped = {'_total': 0}
+        for label in self.__num_labeled_elements:
+            self.__num_dropped[label] = 0
 
     @property
     def is_empty(self):
@@ -49,48 +57,146 @@ class Queue(object):
         return True if not self.__data else False
 
     @property
-    def num_dropped(self):
+    def length(self):
         """
-        Get the number of dropped elements.
+        Get the number of all jobs in the queue.
 
-        @return: Number of dropped elements.
+        @return: Number of jobs.
         @rtype: int
         """
-        return self.__num_dropped
+        return len(self.__data)
+
+    def get_labeled_length(self, label):
+        """
+        Get the number of jobs in the queue by label.
+
+        @param label: Source label of the job.
+        @type label: str
+        @return: Number of jobs.
+        @rtype: int
+        """
+        output = self.__num_labeled_elements.get(label)
+
+        if output is None:
+            output = len(filter(lambda x: x.source_label == label, self.__data))
+
+        return output
+
+    def __increase_labeled_length(self, label):
+        """
+        Increase the number of labeled jobs (in the queue).
+
+        @param label: Source label of the job.
+        @type label: str
+        """
+        if label in self.__num_labeled_elements:
+            self.__num_labeled_elements[label] += 1
+
+    def __decrease_labeled_length(self, label):
+        """
+        Decrease the number of labeled jobs (in the queue).
+
+        @param label: Source label of the job.
+        @type label: str
+        """
+        if label in self.__num_labeled_elements:
+            self.__num_labeled_elements[label] -= 1
+
+    @property
+    def num_dropped(self):
+        """
+        Get the number of all dropped jobs.
+
+        @return: Number of dropped jobs.
+        @rtype: int
+        """
+        return self.__num_dropped['_total']
+
+    def get_num_dropped_with_labels(self):
+        """
+        Get the number of dropped jobs with corresponding labels.
+
+        @return: Pairs of labels and corresponding number of dropped jobs.
+        @rtype: tuple(str, int)
+        """
+        return self.__num_dropped.items()
+
+    def get_labeled_num_dropped(self, label):
+        """
+        Get the number of dropped jobs by label.
+
+        @param label: Source label of the job.
+        @type label: str
+        @return: Number of dropped jobs.
+        @rtype: int
+        """
+        return self.__num_dropped.get(label, 0)
+
+    def __increase_num_dropped(self, label=None):
+        """
+        Increase the number of dropped jobs (in the queue).
+
+        @param label: Source label of the job.
+        @type label: str/None
+        """
+        if label in self.__num_dropped:
+            self.__num_dropped[label] += 1
+
+        self.__num_dropped['_total'] += 1
 
     def reset(self):
         """
         Reset parameters.
         """
         del self.__data[:]
-        self.__num_dropped = 0.
+
+        for label in self.__num_labeled_elements:
+            self.__num_labeled_elements[label] = 0
+
+        for label in self.__num_dropped:
+            self.__num_dropped[label] = 0
 
     def add(self, element):
         """
-        Add element to the queue.
+        Add element (job) to the queue.
 
-        @param element: Queue element.
-        @type element: -
+        @param element: Queue element (job).
+        @type element: qss.core.job.Job
         """
-        if not self.__limit or self.__limit > self.length:
+        with_limit, has_free_spots = False, True
+
+        if '_total' in self.__limit_policy:
+            if (self.__limit_policy['_total'] - self.length) < 1:
+                has_free_spots = False
+            with_limit = True
+
+        if has_free_spots and element.source_label in self.__limit_policy:
+            if (self.__limit_policy[element.source_label] -
+                    self.get_labeled_length(label=element.source_label)) < 1:
+                has_free_spots = False
+            with_limit = True
+
+        if not with_limit or has_free_spots:
             self.__data.append(element)
-        elif self.__limit:
-            self.__num_dropped += 1
+            self.__increase_labeled_length(label=element.source_label)
+        elif with_limit:
+            self.__increase_num_dropped(label=element.source_label)
 
     def show_next(self):
         """
-        Show next element without removing it from the queue.
+        Show next element (job) without removing it from the queue.
 
-        @return: Queue element.
-        @rtype: -
+        @return: Queue element (job).
+        @rtype: qss.core.job.Job
         """
         return self.__data[0]
 
     def pop(self):
         """
-        Get (remove and return) element from the queue.
+        Get (remove and return) element (job) from the queue.
 
-        @return: Queue element.
-        @rtype: -
+        @return: Queue element (job).
+        @rtype: qss.core.job.Job
         """
+        self.__decrease_labeled_length(label=self.show_next().source_label)
         return self.__data.pop(0)
