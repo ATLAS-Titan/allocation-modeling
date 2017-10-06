@@ -13,6 +13,8 @@
 # - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
 #
 
+from collections import defaultdict
+
 try:
     from ..policies import QUEUE_POLICY
 except ImportError:
@@ -38,13 +40,8 @@ class Queue(object):
         if total_limit:
             self.__limit_policy['_total'] = total_limit
 
-        self.__num_labeled_elements = {}
-        for label in policy.get('limit', {}):
-            self.__num_labeled_elements[label] = 0
-
-        self.__num_dropped = {'_total': 0}
-        for label in self.__num_labeled_elements:
-            self.__num_dropped[label] = 0
+        self.__num_labeled_elements = defaultdict(int)
+        self.__num_dropped = defaultdict(int, {'_total': 0})
 
     @property
     def is_empty(self):
@@ -65,6 +62,15 @@ class Queue(object):
         @rtype: int
         """
         return len(self.__data)
+
+    def get_length_with_labels(self):
+        """
+        Get the number of jobs with corresponding labels.
+
+        @return: Pairs of labels and corresponding number of jobs.
+        @rtype: tuple(str, int)
+        """
+        return self.__num_labeled_elements.items()
 
     def get_labeled_length(self, label):
         """
@@ -89,8 +95,7 @@ class Queue(object):
         @param label: Source label of the job.
         @type label: str
         """
-        if label in self.__num_labeled_elements:
-            self.__num_labeled_elements[label] += 1
+        self.__num_labeled_elements[label] += 1
 
     def __decrease_labeled_length(self, label):
         """
@@ -132,16 +137,14 @@ class Queue(object):
         """
         return self.__num_dropped.get(label, 0)
 
-    def __increase_num_dropped(self, label=None):
+    def __increase_num_dropped(self, label):
         """
         Increase the number of dropped jobs (in the queue).
 
         @param label: Source label of the job.
-        @type label: str/None
+        @type label: str
         """
-        if label in self.__num_dropped:
-            self.__num_dropped[label] += 1
-
+        self.__num_dropped[label] += 1
         self.__num_dropped['_total'] += 1
 
     def reset(self):
