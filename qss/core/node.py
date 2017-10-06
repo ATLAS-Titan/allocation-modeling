@@ -180,6 +180,8 @@ class ServiceManager(object):
             for node in self.__idle_nodes:
                 node.unlock()
 
+        self.__num_labeled_jobs.clear()
+
     def __increase_num_labeled_jobs(self, label):
         """
         Increase the number of labeled jobs.
