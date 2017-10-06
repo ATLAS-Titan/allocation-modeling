@@ -40,7 +40,7 @@ class Queue(object):
         if total_limit:
             self.__limit_policy['_total'] = total_limit
 
-        self.__num_labeled_elements = defaultdict(int)
+        self.__num_labeled_jobs = defaultdict(int)
         self.__num_dropped = defaultdict(int, {'_total': 0})
 
     @property
@@ -63,16 +63,16 @@ class Queue(object):
         """
         return len(self.__data)
 
-    def get_length_with_labels(self):
+    def get_num_jobs_with_labels(self):
         """
         Get the number of jobs with corresponding labels.
 
         @return: Pairs of labels and corresponding number of jobs.
         @rtype: tuple(str, int)
         """
-        return self.__num_labeled_elements.items()
+        return self.__num_labeled_jobs.items()
 
-    def get_labeled_length(self, label):
+    def get_num_labeled_jobs(self, label):
         """
         Get the number of jobs in the queue by label.
 
@@ -81,31 +81,31 @@ class Queue(object):
         @return: Number of jobs.
         @rtype: int
         """
-        output = self.__num_labeled_elements.get(label)
+        output = self.__num_labeled_jobs.get(label)
 
         if output is None:
             output = len(filter(lambda x: x.source_label == label, self.__data))
 
         return output
 
-    def __increase_labeled_length(self, label):
+    def __increase_num_labeled_jobs(self, label):
         """
         Increase the number of labeled jobs (in the queue).
 
         @param label: Source label of the job.
         @type label: str
         """
-        self.__num_labeled_elements[label] += 1
+        self.__num_labeled_jobs[label] += 1
 
-    def __decrease_labeled_length(self, label):
+    def __decrease_num_labeled_jobs(self, label):
         """
         Decrease the number of labeled jobs (in the queue).
 
         @param label: Source label of the job.
         @type label: str
         """
-        if label in self.__num_labeled_elements:
-            self.__num_labeled_elements[label] -= 1
+        if label in self.__num_labeled_jobs:
+            self.__num_labeled_jobs[label] -= 1
 
     @property
     def num_dropped(self):
@@ -153,8 +153,8 @@ class Queue(object):
         """
         del self.__data[:]
 
-        for label in self.__num_labeled_elements:
-            self.__num_labeled_elements[label] = 0
+        for label in self.__num_labeled_jobs:
+            self.__num_labeled_jobs[label] = 0
 
         for label in self.__num_dropped:
             self.__num_dropped[label] = 0
@@ -175,13 +175,13 @@ class Queue(object):
 
         if has_free_spots and element.source_label in self.__limit_policy:
             if (self.__limit_policy[element.source_label] -
-                    self.get_labeled_length(label=element.source_label)) < 1:
+                    self.get_num_labeled_jobs(label=element.source_label)) < 1:
                 has_free_spots = False
             with_limit = True
 
         if not with_limit or has_free_spots:
             self.__data.append(element)
-            self.__increase_labeled_length(label=element.source_label)
+            self.__increase_num_labeled_jobs(label=element.source_label)
         elif with_limit:
             self.__increase_num_dropped(label=element.source_label)
 
@@ -201,5 +201,5 @@ class Queue(object):
         @return: Queue element (job).
         @rtype: qss.core.job.Job
         """
-        self.__decrease_labeled_length(label=self.show_next().source_label)
+        self.__decrease_num_labeled_jobs(label=self.show_next().source_label)
         return self.__data.pop(0)
