@@ -14,7 +14,7 @@
 # - Alexey Poyda, <poyda@wdcb.ru>, 2017
 #
 
-from .stream import stream_generator
+from .stream import stream_generator, stream_generator_by_file
 
 from .core import Queue, ServiceManager
 from .core.constants import ActionCode, ServiceState
@@ -132,41 +132,50 @@ class QSS(object):
             self.__current_time = next_release_timestamp
             self.__current_state = ServiceState.Completion
 
-    def __next_action(self):
+    def __next_action(self, verbose=False):
         """
         Run corresponding method based on the current system state.
 
+        @param verbose: Flag to get (show) logs.
+        @type verbose: bool
         @return: Workflow status code.
         @rtype: int
         """
         output = 0
 
         if self.__current_state == ServiceState.Arrival:
-            self.__arrival()
-            self.__submission()
+            self.__arrival(verbose=verbose)
+            self.__submission(verbose=verbose)
 
         elif self.__current_state == ServiceState.Completion:
-            self.__completion()
-            self.__submission()
+            self.__completion(verbose=verbose)
+            self.__submission(verbose=verbose)
 
         elif self.__current_state == ServiceState.Stop:
             output = 1
 
         return output
 
-    def __arrival(self):
+    def __arrival(self, verbose=False):
         """
         Get new (generated) job and put it to the queue.
+
+        @param verbose: Flag to get (show) logs.
+        @type verbose: bool
         """
         gid = self.__next_arrival_params()[0]
         self.__queue.add(self.__job_buffer[gid])
         self.__set_next_arrival_job(gid=gid)
 
-        self.__trace_update(action_code=ActionCode.Arrival)
+        self.__trace_update(verbose=verbose,
+                            action_code=ActionCode.Arrival)
 
-    def __submission(self):
+    def __submission(self, verbose=False):
         """
         Get jobs from the queue and submit them to idle service nodes.
+
+        @param verbose: Flag to get (show) logs.
+        @type verbose: bool
         """
         had_submission = False
         while (not self.__queue.is_empty
@@ -183,11 +192,15 @@ class QSS(object):
                 had_submission = True
 
         if had_submission:
-            self.__trace_update(action_code=ActionCode.Submission)
+            self.__trace_update(verbose=verbose,
+                                action_code=ActionCode.Submission)
 
-    def __completion(self):
+    def __completion(self, verbose=False):
         """
         Release service nodes if the job's processing is done.
+
+        @param verbose: Flag to get (show) logs.
+        @type verbose: bool
         """
         self.__service_manager.stop_job_processing(
             current_time=self.__current_time)
@@ -203,9 +216,10 @@ class QSS(object):
                     job.source_label
                 ]) + '\n')
 
-        self.__trace_update(action_code=ActionCode.Completion)
+        self.__trace_update(verbose=verbose,
+                            action_code=ActionCode.Completion)
 
-    def __trace_update(self, action_code=None):
+    def __trace_update(self, verbose=False, action_code=None):
         """
         Update tracing data.
 
@@ -216,6 +230,13 @@ class QSS(object):
                              self.__queue.length,
                              self.__service_manager.num_processing_jobs,
                              action_code or '-'))
+
+        if verbose:
+            print '{0:15f} - {1} - {2} - {3}'.format(
+                self.__current_time,
+                self.__queue.get_num_jobs_with_labels(),
+                self.__service_manager.get_num_jobs_with_labels(),
+                self.__trace[-1][3])
 
     def __reset(self):
         """
@@ -310,12 +331,14 @@ class QSS(object):
             if len(drop_pairs) > 1:
                 print 'Dropped jobs in queue (by label): {0}'.format(drop_pairs)
 
-    def run(self, streams, output_file=None):
+    def run(self, streams, verbose=False, output_file=None):
         """
         Run simulation.
 
         @param streams: Input streams that generate jobs.
         @type streams: list of generators
+        @param verbose: Flag to get (show) logs.
+        @type verbose: bool
         @param output_file: Name of file for output per run.
         @type output_file: str/None
         """
@@ -332,7 +355,7 @@ class QSS(object):
             self.__set_next_arrival_job(gid=gid)
 
         while True:
-            status_code = self.__next_action()
+            status_code = self.__next_action(verbose=verbose)
             if status_code:
                 break
             self.__set_next_timestamp()
