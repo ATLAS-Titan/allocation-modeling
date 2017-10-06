@@ -13,6 +13,8 @@
 # - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
 #
 
+from collections import defaultdict
+
 
 class Node(object):
 
@@ -101,6 +103,8 @@ class ServiceManager(object):
         self.__idle_nodes = [Node() for _ in range(num_nodes)]
         self.__busy_node_groups = []
 
+        self.__num_labeled_jobs = defaultdict(int)
+
         self.__output_channel = output_channel
 
     @property
@@ -136,6 +140,7 @@ class ServiceManager(object):
         for node in nodes:
             node.lock(job=job)
         self.__busy_node_groups.append(nodes)
+        self.__increase_num_labeled_jobs(label=job.source_label)
 
         self.__busy_node_groups.sort(key=lambda x: x[0].release_timestamp)
         return 0
@@ -152,6 +157,9 @@ class ServiceManager(object):
 
             nodes = self.__busy_node_groups.pop(0)
             self.__output_channel.append(nodes[0].get_job())
+
+            self.__decrease_num_labeled_jobs(
+                label=nodes[0].get_job().source_label)
 
             for node in nodes:
                 node.unlock()
@@ -171,6 +179,34 @@ class ServiceManager(object):
         if not self.all_nodes_idle:
             for node in self.__idle_nodes:
                 node.unlock()
+
+    def __increase_num_labeled_jobs(self, label):
+        """
+        Increase the number of labeled jobs.
+
+        @param label: Source label of the job.
+        @type label: str
+        """
+        self.__num_labeled_jobs[label] += 1
+
+    def __decrease_num_labeled_jobs(self, label):
+        """
+        Decrease the number of labeled jobs.
+
+        @param label: Source label of the job.
+        @type label: str
+        """
+        if label in self.__num_labeled_jobs:
+            self.__num_labeled_jobs[label] -= 1
+
+    def get_num_jobs_with_labels(self):
+        """
+        Get the number of jobs with corresponding labels.
+
+        @return: Pairs of labels and corresponding number of jobs.
+        @rtype: tuple(str, int)
+        """
+        return self.__num_labeled_jobs.items()
 
     @property
     def all_nodes_busy(self):
