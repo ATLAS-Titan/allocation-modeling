@@ -72,6 +72,7 @@ def stream_generator(arrival_rate, execution_rate, num_nodes=None,
 def stream_generator_by_file(file_name, source_label=None, time_limit=None):
     """
     Yield jobs with specified arrival and service times.
+    (file line format: "<arrival_timestamp>,<execution_time>,<num_nodes>")
 
     @param file_name: File name with input data.
     @type file_name: str
