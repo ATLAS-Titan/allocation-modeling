@@ -295,7 +295,7 @@ class QSS(object):
         """
         Get average job's delay (wait time + service time).
 
-        @param source_label: Source label (make calculations by stream)
+        @param source_label: Source label (make calculations by stream).
         @type source_label: str/None
         @return: Average number.
         @rtype: float
@@ -308,6 +308,26 @@ class QSS(object):
                 lambda x: x.source_label == source_label, self.__output)
 
             output = reduce(lambda x, y: x + y.delay, jobs, 0.) / len(jobs)
+
+        return output
+
+    def get_utilization_value(self, source_label=None):
+        """
+        Get the utilization value.
+
+        @param source_label: Source label (make calculations by stream).
+        @type source_label: str/None
+        @return: Utilization value.
+        @rtype: float
+        """
+        output = 0.
+
+        if self.__output:
+            jobs = self.__output if not source_label else filter(
+                lambda x: x.source_label == source_label, self.__output)
+
+            output = reduce(
+                lambda x, y: x + (y.num_nodes * y.execution_time), jobs, 0.)
 
         return output
 
