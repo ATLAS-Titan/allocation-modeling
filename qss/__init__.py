@@ -24,7 +24,8 @@ class QSS(object):
 
     """Queueing System Simulator."""
 
-    def __init__(self, num_nodes, queue_limit=None, output_file=None):
+    def __init__(self, num_nodes, queue_limit=None, time_limit=None,
+                 output_file=None):
         """
         Initialization.
 
@@ -32,11 +33,14 @@ class QSS(object):
         @type num_nodes: int
         @param queue_limit: Maximum number of elements (jobs) in queue.
         @type queue_limit: int/None
+        @param time_limit: The maximum timestamp (until simulator is done).
+        @type time_limit: float/None
         @param output_file: Name of file for output (addon for output_channel).
         @type output_file: str/None
         """
         self.__current_state = None
         self.__current_time = 0.
+        self.__time_limit = time_limit
 
         self.__job_generators = []
         self.__job_buffer = []
@@ -123,14 +127,19 @@ class QSS(object):
         if not next_arrival_timestamp and not next_release_timestamp:
             self.__current_state = ServiceState.Stop
 
-        elif (not next_release_timestamp or
-                next_release_timestamp > next_arrival_timestamp > 0.):
-            self.__current_time = next_arrival_timestamp
-            self.__current_state = ServiceState.Arrival
+        else:
 
-        elif next_release_timestamp:
-            self.__current_time = next_release_timestamp
-            self.__current_state = ServiceState.Completion
+            if (not next_release_timestamp or
+                    next_release_timestamp > next_arrival_timestamp > 0.):
+                self.__current_time = next_arrival_timestamp
+                self.__current_state = ServiceState.Arrival
+            elif next_release_timestamp:
+                self.__current_time = next_release_timestamp
+                self.__current_state = ServiceState.Completion
+
+            if (self.__time_limit and self.__current_time and
+                    self.__time_limit < self.__current_time):
+                self.__current_state = ServiceState.Stop
 
     def __next_action(self, verbose=False):
         """
@@ -262,7 +271,7 @@ class QSS(object):
         """
         output = 0.
 
-        if self.__trace:
+        if self.__trace and (self.__trace[-1][0] - self.__trace[0][0]):
             for i in range(0, len(self.__trace) - 1):
                 num_jobs = self.__trace[i][1] + self.__trace[i][2]
                 dt = self.__trace[i + 1][0] - self.__trace[i][0]
@@ -281,7 +290,7 @@ class QSS(object):
         """
         output = 0.
 
-        if self.__trace:
+        if self.__trace and (self.__trace[-1][0] - self.__trace[0][0]):
             for i in range(0, len(self.__trace) - 1):
                 num_jobs_in_queue = self.__trace[i][1]
                 dt = self.__trace[i + 1][0] - self.__trace[i][0]
