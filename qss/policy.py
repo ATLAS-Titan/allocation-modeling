@@ -21,3 +21,27 @@ QUEUE_POLICY = {
         StreamName.Main: 4
     }
 }
+
+JOB_POLICY = {
+    'priority': [
+        {'num_nodes_range': (1, 125),
+         'group': 5,
+         'base_priority': 0.},
+
+        {'num_nodes_range': (126, 312),
+         'group': 4,
+         'base_priority': 0.},
+
+        {'num_nodes_range': (313, 3749),
+         'group': 3,
+         'base_priority': 0.},
+
+        {'num_nodes_range': (3750, 11249),
+         'group': 2,
+         'base_priority': 432000.},  # 5 days
+
+        {'num_nodes_range': (11250,),
+         'group': 1,
+         'base_priority': 1296000.}  # 15 days
+    ]
+}
