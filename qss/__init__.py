@@ -25,7 +25,7 @@ class QSS(object):
     """Queueing System Simulator."""
 
     def __init__(self, num_nodes, queue_limit=None, time_limit=None,
-                 output_file=None):
+                 output_file=None, trace_file=None):
         """
         Initialization.
 
@@ -37,6 +37,8 @@ class QSS(object):
         @type time_limit: float/None
         @param output_file: Name of file for output (addon for output_channel).
         @type output_file: str/None
+        @param trace_file: Name of file for trace info (addon for trace).
+        @type trace_file: str/None
         """
         self.__current_state = None
         self.__current_time = 0.
@@ -51,8 +53,10 @@ class QSS(object):
         self.__service_manager = ServiceManager(num_nodes=num_nodes,
                                                 output_channel=self.__output)
 
-        self.__output_file = output_file
         self.__trace = []
+
+        self.__output_file = output_file
+        self.__trace_file = trace_file
 
     @property
     def output_channel(self):
@@ -240,12 +244,20 @@ class QSS(object):
                              self.__service_manager.num_processing_jobs,
                              action_code or '-'))
 
-        if verbose:
-            print '{0:15f} - {1} - {2} - {3}'.format(
+        if verbose or self.__trace_file:
+
+            detailed_trace_string = '{0:15f} - {1} - {2} - {3}'.format(
                 self.__current_time,
                 self.__queue.get_num_jobs_with_labels(),
                 self.__service_manager.get_num_jobs_with_labels(),
                 self.__trace[-1][3])
+
+            if verbose:
+                print detailed_trace_string
+
+            if self.__trace_file:
+                with open(self.__trace_file, 'a') as f:
+                    f.write(detailed_trace_string + '\n')
 
     def __reset(self):
         """
