@@ -16,7 +16,7 @@
 from collections import defaultdict
 
 try:
-    from ..policies import QUEUE_POLICY
+    from ..policy import QUEUE_POLICY
 except ImportError:
     QUEUE_POLICY = {}
 
