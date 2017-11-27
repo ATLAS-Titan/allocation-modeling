@@ -23,14 +23,16 @@ except ImportError:
 
 class Queue(object):
 
-    def __init__(self, policy=None, total_limit=None):
+    def __init__(self, policy=None, total_limit=None, with_buffer=False):
         """
-        Initialization.
+        Initialization (limits are applied to the queue excluding the buffer).
 
         @param policy: Policy for queue behaviour.
         @type policy: dict/None
         @param total_limit: Maximum number of jobs in the queue.
         @type total_limit: int/None
+        @param with_buffer: Flag to use buffer (instead of drop the job).
+        @type with_buffer: bool
         """
         self.__data = []
 
@@ -41,7 +43,13 @@ class Queue(object):
             self.__limit_policy['_total'] = total_limit
 
         self.__num_labeled_jobs = defaultdict(int)
-        self.__num_dropped = defaultdict(int, {'_total': 0})
+
+        if with_buffer:
+            self.__buffer_by_label = defaultdict(list)
+            self.__num_dropped = None
+        else:
+            self.__num_dropped = defaultdict(int, {'_total': 0})
+            self.__buffer_by_label = None
 
     @property
     def is_empty(self):
@@ -63,28 +71,68 @@ class Queue(object):
         """
         return len(self.__data)
 
-    def get_num_jobs_with_labels(self):
+    @property
+    def length_buffer(self):
         """
-        Get the number of jobs with corresponding labels.
+        Get the number of all jobs in the buffer.
 
-        @return: Pairs of labels and corresponding number of jobs.
-        @rtype: tuple(str, int)
-        """
-        return self.__num_labeled_jobs.items()
-
-    def get_num_labeled_jobs(self, label):
-        """
-        Get the number of jobs in the queue by label.
-
-        @param label: Source label of the job.
-        @type label: str
         @return: Number of jobs.
         @rtype: int
         """
-        output = self.__num_labeled_jobs.get(label)
+        output = 0
 
-        if output is None:
-            output = len(filter(lambda x: x.source_label == label, self.__data))
+        if self.__buffer_by_label is not None:
+            output = sum(map(lambda x: len(x), self.__buffer_by_label.values()))
+
+        return output
+
+    @property
+    def length_total(self):
+        """
+        Get the number of all jobs in the queue and its buffer.
+
+        @return: Number of jobs.
+        @rtype: int
+        """
+        return self.length + self.length_buffer
+
+    def get_num_labeled_jobs(self, label, in_buffer=False):
+        """
+        Get the number of jobs in the queue/buffer by label.
+
+        @param label: Source label of the job.
+        @type label: str
+        @param in_buffer: Flag to count jobs in the buffer.
+        @type in_buffer: bool
+        @return: Number of jobs.
+        @rtype: int
+        """
+        if not in_buffer:
+            output = self.__num_labeled_jobs[label]
+        else:
+            output = 0
+            if (self.__buffer_by_label is not None
+                    and label in self.__buffer_by_label):
+                output = len(self.__buffer_by_label[label])
+
+        return output
+
+    def get_num_jobs_with_labels(self, in_buffer=False):
+        """
+        Get the number of jobs with corresponding labels.
+
+        @param in_buffer: Flag to count jobs in the buffer.
+        @type in_buffer: bool
+        @return: Pairs of labels and corresponding number of jobs.
+        @rtype: list((str, int))
+        """
+        if not in_buffer:
+            output = self.__num_labeled_jobs.items()
+        else:
+            output = []
+            if self.__buffer_by_label is not None:
+                output = map(lambda (k, v): (k, len(v)),
+                             self.__buffer_by_label.items())
 
         return output
 
@@ -115,16 +163,7 @@ class Queue(object):
         @return: Number of dropped jobs.
         @rtype: int
         """
-        return self.__num_dropped['_total']
-
-    def get_num_dropped_with_labels(self):
-        """
-        Get the number of dropped jobs with corresponding labels.
-
-        @return: Pairs of labels and corresponding number of dropped jobs.
-        @rtype: tuple(str, int)
-        """
-        return self.__num_dropped.items()
+        return 0 if self.__num_dropped is None else self.__num_dropped['_total']
 
     def get_labeled_num_dropped(self, label):
         """
@@ -135,17 +174,30 @@ class Queue(object):
         @return: Number of dropped jobs.
         @rtype: int
         """
-        return self.__num_dropped.get(label, 0)
+        return 0 if self.__num_dropped is None else self.__num_dropped[label]
 
-    def __increase_num_dropped(self, label):
+    def get_num_dropped_with_labels(self):
         """
-        Increase the number of dropped jobs (in the queue).
+        Get the number of dropped jobs with corresponding labels.
 
-        @param label: Source label of the job.
-        @type label: str
+        @return: Pairs of labels and corresponding number of dropped jobs.
+        @rtype: list((str, int))
         """
-        self.__num_dropped[label] += 1
-        self.__num_dropped['_total'] += 1
+        return [] if self.__num_dropped is None else self.__num_dropped.items()
+
+    def __process_rejected_jobs(self, element):
+        """
+        Process elements that were not added to the queue (due to the limit).
+
+        @param element: Queue element (job).
+        @type element: qss.core.job.Job
+        """
+        if self.__buffer_by_label is not None:
+            self.__buffer_by_label[element.source_label].append(element)
+
+        elif self.__num_dropped is not None:
+            self.__num_dropped[element.source_label] += 1
+            self.__num_dropped['_total'] += 1
 
     def reset(self):
         """
@@ -156,8 +208,13 @@ class Queue(object):
         for label in self.__num_labeled_jobs:
             self.__num_labeled_jobs[label] = 0
 
-        for label in self.__num_dropped:
-            self.__num_dropped[label] = 0
+        if self.__buffer_by_label is not None:
+            for label in self.__buffer_by_label:
+                del self.__buffer_by_label[label][:]
+
+        if self.__num_dropped is not None:
+            for label in self.__num_dropped:
+                self.__num_dropped[label] = 0
 
     def add(self, element):
         """
@@ -183,11 +240,11 @@ class Queue(object):
             self.__data.append(element)
             self.__increase_num_labeled_jobs(label=element.source_label)
         elif with_limit:
-            self.__increase_num_dropped(label=element.source_label)
+            self.__process_rejected_jobs(element=element)
 
     def show_next(self):
         """
-        Show next element (job) without removing it from the queue.
+        Show the next element (job) without removing it from the queue.
 
         @return: Queue element (job).
         @rtype: qss.core.job.Job
@@ -201,5 +258,13 @@ class Queue(object):
         @return: Queue element (job).
         @rtype: qss.core.job.Job
         """
-        self.__decrease_num_labeled_jobs(label=self.show_next().source_label)
-        return self.__data.pop(0)
+        job_source_label = self.show_next().source_label
+
+        output = self.__data.pop(0)
+        self.__decrease_num_labeled_jobs(label=job_source_label)
+
+        # get the job (of the defined label) from the buffer
+        if self.get_num_labeled_jobs(label=job_source_label, in_buffer=True):
+            self.add(element=self.__buffer_by_label[job_source_label].pop(0))
+
+        return output
