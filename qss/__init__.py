@@ -24,8 +24,8 @@ class QSS(object):
 
     """Queueing System Simulator."""
 
-    def __init__(self, num_nodes, queue_limit=None, time_limit=None,
-                 output_file=None, trace_file=None):
+    def __init__(self, num_nodes, queue_limit=None, use_queue_buffer=False,
+                 time_limit=None, output_file=None, trace_file=None):
         """
         Initialization.
 
@@ -33,6 +33,8 @@ class QSS(object):
         @type num_nodes: int
         @param queue_limit: Maximum number of elements (jobs) in queue.
         @type queue_limit: int/None
+        @param use_queue_buffer: Flag to use queue buffer (if it's necessary).
+        @type use_queue_buffer: bool
         @param time_limit: The maximum timestamp (until simulator is done).
         @type time_limit: float/None
         @param output_file: Name of file for output (addon for output_channel).
@@ -47,7 +49,8 @@ class QSS(object):
         self.__job_generators = []
         self.__job_buffer = []
 
-        self.__queue = Queue(total_limit=queue_limit)
+        self.__queue = Queue(total_limit=queue_limit,
+                             with_buffer=use_queue_buffer)
 
         self.__output = []
         self.__service_manager = ServiceManager(num_nodes=num_nodes,
@@ -246,8 +249,9 @@ class QSS(object):
 
         if verbose or self.__trace_file:
 
-            detailed_trace_string = '{0:15f} - {1} - {2} - {3}'.format(
+            detailed_trace_string = '{0:15f} - {1} - {2} - {3} - {4}'.format(
                 self.__current_time,
+                self.__queue.get_num_jobs_with_labels(in_buffer=True),
                 self.__queue.get_num_jobs_with_labels(),
                 self.__service_manager.get_num_jobs_with_labels(),
                 self.__trace[-1][3])
