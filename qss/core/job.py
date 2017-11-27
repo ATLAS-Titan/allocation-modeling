@@ -93,10 +93,19 @@ class Job(object):
             return
 
         for group in priority_groups:
-            min_num, max_num = group['num_nodes_range']
+
+            if not group['num_nodes_range']:
+                continue
+
+            if len(group['num_nodes_range']) < 2:
+                min_num, max_num = group['num_nodes_range'][0], None
+            else:
+                min_num, max_num = group['num_nodes_range']
+
             if ((max_num and self.num_nodes > max_num)
                     or (min_num and self.num_nodes < min_num)):
                 continue
+
             self.group = group['group']
             self.priority += group['base_priority']
 
