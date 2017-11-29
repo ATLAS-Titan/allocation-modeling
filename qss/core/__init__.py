@@ -11,5 +11,5 @@
 #
 
 from .job import Job
-from .node import ServiceManager
+from .node import NodeManager
 from .queue import Queue

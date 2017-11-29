@@ -28,28 +28,29 @@ class Node(object):
         self.__locked = False
 
     @property
-    def submission_timestamp(self):
+    def start_timestamp(self):
         """
-        Timestamp when the job was submitted.
+        Timestamp when job processing was started.
 
         @return: Job submission timestamp.
-        @rtype: float
+        @rtype: float/None
         """
         if self.__job is not None:
             return self.__job.submission_timestamp
 
     @property
-    def release_timestamp(self):
+    def stop_timestamp(self):
         """
-        Timestamp when the job will be released.
+        Timestamp when job processing will be finished.
 
-        @return: Job released timestamp.
-        @rtype: float
+        @return: Job release timestamp.
+        @rtype: float/None
         """
         if self.__job is not None:
             return self.__job.release_timestamp
 
-    def get_job(self):
+    @property
+    def allocated_job(self):
         """
         Get job object.
 
@@ -71,7 +72,7 @@ class Node(object):
 
     def unlock(self):
         """
-        Unlock the service node after job processing is done.
+        Unlock the service node after job processing is finished.
         """
         self.__job = None
         self.__locked = False
@@ -87,25 +88,21 @@ class Node(object):
         return self.__locked
 
 
-class ServiceManager(object):
+class NodeManager(object):
 
-    """Class ServiceManager is responsible to handle a group of nodes."""
+    """Class NodeManager is responsible to handle a group of nodes."""
 
-    def __init__(self, num_nodes, output_channel):
+    def __init__(self, num_nodes):
         """
         Initialization.
 
         @param num_nodes: Number of service nodes.
         @type num_nodes: int
-        @param output_channel: List of processed jobs.
-        @type output_channel: list
         """
         self.__idle_nodes = [Node() for _ in range(num_nodes)]
         self.__busy_node_groups = []
 
         self.__num_labeled_jobs = defaultdict(int)
-
-        self.__output_channel = output_channel
 
     @property
     def next_release_timestamp(self):
@@ -116,54 +113,76 @@ class ServiceManager(object):
         @rtype: float
         """
         if self.__busy_node_groups:
-            return self.__busy_node_groups[0][0].release_timestamp
+            return self.__busy_node_groups[0][0].stop_timestamp
 
-    def start_job_processing(self, current_time, job):
+    def ready_for_processing(self, job):
         """
-        Assign job to the defined number of idle service nodes for processing.
+        Check availability of resources to start job processing.
+
+        @param job: Job object.
+        @type job: qss.core.job.Job
+        @return: Flag that job processing can be started.
+        @rtype: bool
+        """
+        output = True
+
+        if self.num_idle_nodes < job.num_nodes:
+            output = False
+
+        return output
+
+    def start_processing(self, current_time, job):
+        """
+        Assign job to the defined number of idle nodes for processing.
 
         @param current_time: Current time (timestamp from 0 to now).
         @type current_time: float
         @param job: Job object.
         @type job: qss.core.job.Job
-        @return: Operation status code (0 - success, >0 - failure).
-        @rtype: int
         """
-        if self.num_idle_nodes < job.num_nodes:
-            return 1
-
         job.submission_timestamp = current_time
 
+        # get idle nodes
         nodes = self.__idle_nodes[:job.num_nodes]
         del self.__idle_nodes[:job.num_nodes]
 
+        # assign job to each node
         for node in nodes:
             node.lock(job=job)
+
+        # mark nodes busy
         self.__busy_node_groups.append(nodes)
+        self.__busy_node_groups.sort(key=lambda x: x[0].stop_timestamp)
+
         self.__increase_num_labeled_jobs(label=job.source_label)
 
-        self.__busy_node_groups.sort(key=lambda x: x[0].release_timestamp)
-        return 0
-
-    def stop_job_processing(self, current_time):
+    def stop_processing(self, current_time):
         """
-        Release scheduled service nodes.
+        Release scheduled service nodes and get finished jobs.
 
         @param current_time: Current time (timestamp from 0 to now).
         @type current_time: float
         """
-        while (self.__busy_node_groups and
-               current_time == self.__busy_node_groups[0][0].release_timestamp):
+        output = []
 
+        while current_time == self.next_release_timestamp:
+
+            # get busy nodes (where job processing is finished)
             nodes = self.__busy_node_groups.pop(0)
-            self.__output_channel.append(nodes[0].get_job())
 
-            self.__decrease_num_labeled_jobs(
-                label=nodes[0].get_job().source_label)
+            # move job to the output
+            output.append(nodes[0].allocated_job)
 
+            # unlock corresponding nodes
             for node in nodes:
                 node.unlock()
+
+            # mark nodes idle
             self.__idle_nodes.extend(nodes)
+
+            self.__decrease_num_labeled_jobs(label=output[-1].source_label)
+
+        return output
 
     def reset(self):
         """
@@ -174,6 +193,7 @@ class ServiceManager(object):
 
             for node in nodes:
                 node.unlock()
+
             self.__idle_nodes.extend(nodes)
 
         if not self.all_nodes_idle:

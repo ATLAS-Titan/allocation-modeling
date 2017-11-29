@@ -16,7 +16,7 @@
 
 from .stream import stream_generator, stream_generator_by_file
 
-from .core import Queue, ServiceManager
+from .core import Queue, NodeManager
 from .core.constants import ActionCode, ServiceState
 
 
@@ -47,15 +47,14 @@ class QSS(object):
         self.__time_limit = time_limit
 
         self.__job_generators = []
-        self.__job_buffer = []
+        self.__input_jobs = []
 
         self.__queue = Queue(total_limit=queue_limit,
                              with_buffer=use_queue_buffer)
 
-        self.__output = []
-        self.__service_manager = ServiceManager(num_nodes=num_nodes,
-                                                output_channel=self.__output)
+        self.__node_manager = NodeManager(num_nodes=num_nodes)
 
+        self.__output = []
         self.__trace = []
 
         self.__output_file = output_file
@@ -88,18 +87,18 @@ class QSS(object):
         @param gid: Generator id.
         @type gid: int
         """
-        next_job_id = len(self.__job_buffer)
-        if gid < next_job_id:
+        next_gid = len(self.__input_jobs)
+        if gid < next_gid:
             pass
-        elif gid == next_job_id and gid < len(self.__job_generators):
-            self.__job_buffer.append(None)
+        elif gid == next_gid and gid < len(self.__job_generators):
+            self.__input_jobs.append(None)
         else:
             raise Exception('Generator id is out of limit.')
 
         try:
-            self.__job_buffer[gid] = self.__job_generators[gid].next()
+            self.__input_jobs[gid] = self.__job_generators[gid].next()
         except StopIteration:
-            self.__job_buffer[gid] = None
+            self.__input_jobs[gid] = None
 
     def __next_arrival_params(self):
         """
@@ -109,7 +108,7 @@ class QSS(object):
         @rtype: tuple
         """
         sorted_params = sorted([(i, j.arrival_timestamp)
-                                for i, j in enumerate(self.__job_buffer) if j],
+                                for i, j in enumerate(self.__input_jobs) if j],
                                key=lambda x: x[1])
 
         output = (None, 0.) if not sorted_params else sorted_params[0]
@@ -129,7 +128,7 @@ class QSS(object):
         Define the next timestamp based on the closest action that is scheduled.
         """
         next_arrival_timestamp = self.__next_arrival_timestamp()
-        next_release_timestamp = self.__service_manager.next_release_timestamp
+        next_release_timestamp = self.__node_manager.next_release_timestamp
 
         if not next_arrival_timestamp and not next_release_timestamp:
             self.__current_state = ServiceState.Stop
@@ -180,7 +179,7 @@ class QSS(object):
         @type verbose: bool
         """
         gid = self.__next_arrival_params()[0]
-        self.__queue.add(self.__job_buffer[gid])
+        self.__queue.add(self.__input_jobs[gid])
         self.__set_next_arrival_job(gid=gid)
 
         self.__trace_update(verbose=verbose,
@@ -195,15 +194,15 @@ class QSS(object):
         """
         had_submission = False
         while (not self.__queue.is_empty
-                and not self.__service_manager.all_nodes_busy):
+                and not self.__node_manager.all_nodes_busy):
 
-            exec_code = self.__service_manager.start_job_processing(
-                current_time=self.__current_time, job=self.__queue.show_next())
-
-            if exec_code:
+            if not self.__node_manager.ready_for_processing(
+                    job=self.__queue.show_next()):
                 break
 
-            self.__queue.pop()
+            self.__node_manager.start_processing(
+                current_time=self.__current_time, job=self.__queue.pop())
+
             if not had_submission:
                 had_submission = True
 
@@ -218,8 +217,8 @@ class QSS(object):
         @param verbose: Flag to get (show) logs.
         @type verbose: bool
         """
-        self.__service_manager.stop_job_processing(
-            current_time=self.__current_time)
+        self.__output.extend(self.__node_manager.stop_processing(
+            current_time=self.__current_time))
 
         if self.__output_file and self.__output:
             job = self.__output[-1]
@@ -244,7 +243,7 @@ class QSS(object):
         """
         self.__trace.append((self.__current_time,
                              self.__queue.length,
-                             self.__service_manager.num_processing_jobs,
+                             self.__node_manager.num_processing_jobs,
                              action_code or '-'))
 
         if verbose or self.__trace_file:
@@ -253,7 +252,7 @@ class QSS(object):
                 self.__current_time,
                 self.__queue.get_num_jobs_with_labels(in_buffer=True),
                 self.__queue.get_num_jobs_with_labels(),
-                self.__service_manager.get_num_jobs_with_labels(),
+                self.__node_manager.get_num_jobs_with_labels(),
                 self.__trace[-1][3])
 
             if verbose:
@@ -270,10 +269,10 @@ class QSS(object):
         self.__current_state = None
         self.__current_time = 0.
 
-        del self.__job_buffer[:]
+        del self.__input_jobs[:]
 
         self.__queue.reset()
-        self.__service_manager.reset()
+        self.__node_manager.reset()
 
         del self.__output[:]
         del self.__trace[:]
