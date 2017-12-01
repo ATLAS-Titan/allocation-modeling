@@ -25,7 +25,7 @@ except ImportError:
 
 class Queue(object):
 
-    __discipline = QueueDiscipline.Priority
+    __discipline = QueueDiscipline.FIFO
 
     def __init__(self, policy=None, total_limit=None, with_buffer=False):
         """
