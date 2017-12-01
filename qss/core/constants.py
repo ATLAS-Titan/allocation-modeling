@@ -27,3 +27,8 @@ ServiceState = EnumTypes(
     ('Completion', 1),
     ('Stop', 2)
 )
+
+QueueDiscipline = EnumTypes(
+    ('FIFO', 'fifo'),
+    ('Priority', 'priority')
+)
