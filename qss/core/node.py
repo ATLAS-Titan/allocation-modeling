@@ -162,6 +162,8 @@ class NodeManager(object):
 
         @param current_time: Current time (timestamp from 0 to now).
         @type current_time: float
+        @return: Finished (processed) jobs.
+        @rtype: list
         """
         output = []
 

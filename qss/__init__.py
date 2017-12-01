@@ -179,7 +179,8 @@ class QSS(object):
         @type verbose: bool
         """
         gid = self.__next_arrival_params()[0]
-        self.__queue.add(self.__input_jobs[gid])
+        self.__queue.add(current_time=self.__current_time,
+                         job=self.__input_jobs[gid])
         self.__set_next_arrival_job(gid=gid)
 
         self.__trace_update(verbose=verbose,
@@ -201,7 +202,8 @@ class QSS(object):
                 break
 
             self.__node_manager.start_processing(
-                current_time=self.__current_time, job=self.__queue.pop())
+                current_time=self.__current_time,
+                job=self.__queue.get_next(current_time=self.__current_time))
 
             if not had_submission:
                 had_submission = True

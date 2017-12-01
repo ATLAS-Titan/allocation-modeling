@@ -15,6 +15,8 @@
 
 from collections import defaultdict
 
+from .constants import QueueDiscipline
+
 try:
     from ..policy import QUEUE_POLICY
 except ImportError:
@@ -22,6 +24,8 @@ except ImportError:
 
 
 class Queue(object):
+
+    __discipline = QueueDiscipline.Priority
 
     def __init__(self, policy=None, total_limit=None, with_buffer=False):
         """
@@ -35,6 +39,7 @@ class Queue(object):
         @type with_buffer: bool
         """
         self.__data = []
+        self.__latest_queued_timestamp = 0.
 
         policy = policy or QUEUE_POLICY
 
@@ -185,18 +190,45 @@ class Queue(object):
         """
         return [] if self.__num_dropped is None else self.__num_dropped.items()
 
-    def __process_rejected_jobs(self, element):
+    def __pre_processing(self, current_time):
         """
-        Process elements that were not added to the queue (due to the limit).
+        Make some updates before the element (job) will be processed.
 
-        @param element: Queue element (job).
-        @type element: qss.core.job.Job
+        @param current_time: Current time (timestamp from 0 to now).
+        @type current_time: float
+        """
+        if self.__discipline == QueueDiscipline.Priority:
+            time_delta = current_time - self.__latest_queued_timestamp
+            for element in self.__data:
+                element.increase_priority(value=time_delta)
+
+        self.__latest_queued_timestamp = current_time
+
+    def __process_approved_job(self, job):
+        """
+        Process element that is approved to be added to the queue.
+
+        @param job: Job object.
+        @type job: qss.core.job.Job
+        """
+        self.__data.append(job)
+        self.__increase_num_labeled_jobs(label=job.source_label)
+
+        if self.__discipline == QueueDiscipline.Priority:
+            self.__data.sort(key=lambda x: x.priority, reverse=True)
+
+    def __process_rejected_job(self, job):
+        """
+        Process element that was not added to the queue (due to the limit).
+
+        @param job: Job object.
+        @type job: qss.core.job.Job
         """
         if self.__buffer_by_label is not None:
-            self.__buffer_by_label[element.source_label].append(element)
+            self.__buffer_by_label[job.source_label].append(job)
 
         elif self.__num_dropped is not None:
-            self.__num_dropped[element.source_label] += 1
+            self.__num_dropped[job.source_label] += 1
             self.__num_dropped['_total'] += 1
 
     def reset(self):
@@ -204,6 +236,7 @@ class Queue(object):
         Reset parameters.
         """
         del self.__data[:]
+        self.__latest_queued_timestamp = 0.
 
         for label in self.__num_labeled_jobs:
             self.__num_labeled_jobs[label] = 0
@@ -216,13 +249,17 @@ class Queue(object):
             for label in self.__num_dropped:
                 self.__num_dropped[label] = 0
 
-    def add(self, element):
+    def add(self, current_time, job):
         """
         Add element (job) to the queue.
 
-        @param element: Queue element (job).
-        @type element: qss.core.job.Job
+        @param current_time: Current time (timestamp from 0 to now).
+        @type current_time: float
+        @param job: Job object.
+        @type job: qss.core.job.Job
         """
+        self.__pre_processing(current_time=current_time)
+
         with_limit, has_free_spots = False, True
 
         if '_total' in self.__limit_policy:
@@ -230,41 +267,41 @@ class Queue(object):
                 has_free_spots = False
             with_limit = True
 
-        if has_free_spots and element.source_label in self.__limit_policy:
-            if (self.__limit_policy[element.source_label] -
-                    self.get_num_labeled_jobs(label=element.source_label)) < 1:
+        if has_free_spots and job.source_label in self.__limit_policy:
+            if (self.__limit_policy[job.source_label] -
+                    self.get_num_labeled_jobs(label=job.source_label)) < 1:
                 has_free_spots = False
             with_limit = True
 
         if not with_limit or has_free_spots:
-            self.__data.append(element)
-            self.__increase_num_labeled_jobs(label=element.source_label)
+            self.__process_approved_job(job=job)
         elif with_limit:
-            self.__process_rejected_jobs(element=element)
+            self.__process_rejected_job(job=job)
 
     def show_next(self):
         """
-        Show the next element (job) without removing it from the queue.
+        Show the next available job without removing it from the queue.
 
-        @return: Queue element (job).
+        @return: Job object.
         @rtype: qss.core.job.Job
         """
         return self.__data[0]
 
-    def pop(self):
+    def get_next(self, current_time):
         """
-        Get (remove and return) element (job) from the queue.
+        Get (remove and return) job from the queue.
 
-        @return: Queue element (job).
+        @param current_time: Current time (timestamp from 0 to now).
+        @type current_time: float
+        @return: Job object.
         @rtype: qss.core.job.Job
         """
-        job_source_label = self.show_next().source_label
-
         output = self.__data.pop(0)
-        self.__decrease_num_labeled_jobs(label=job_source_label)
+        self.__decrease_num_labeled_jobs(label=output.source_label)
 
         # get the job (of the defined label) from the buffer
-        if self.get_num_labeled_jobs(label=job_source_label, in_buffer=True):
-            self.add(element=self.__buffer_by_label[job_source_label].pop(0))
+        if self.get_num_labeled_jobs(label=output.source_label, in_buffer=True):
+            self.add(current_time=current_time,
+                     job=self.__buffer_by_label[output.source_label].pop(0))
 
         return output
