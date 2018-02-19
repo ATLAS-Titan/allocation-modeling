@@ -10,7 +10,7 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Author(s):
-# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
+# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017-2018
 #
 
 try:
@@ -25,19 +25,21 @@ class Job(object):
         """
         Initialization.
 
-        @param execution_time: Processing time.
+        @param execution_time: [Actual] processing time.
         @type execution_time: float
-        @param num_nodes: Number required service nodes.
+        @param num_nodes: Number of required service nodes.
         @type num_nodes: int
         @param source_label: Input stream name.
         @type source_label: str/None
 
+        @keyword wall_time: Requested processing time.
         @keyword arrival_timestamp: Arrival timestamp.
         @keyword priority: Priority value.
         """
-        self.execution_time = execution_time
+        self.wall_time = kwargs.get('wall_time')
         self.num_nodes = num_nodes
 
+        self.execution_time = execution_time
         self.source_label = source_label
 
         self.arrival_timestamp = kwargs.get('arrival_timestamp')
