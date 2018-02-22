@@ -179,8 +179,8 @@ class QSS(object):
         @type verbose: bool
         """
         gid = self.__next_arrival_params()[0]
-        self.__queue.add(current_time=self.__current_time,
-                         job=self.__input_jobs[gid])
+        self.__queue.add(job=self.__input_jobs[gid],
+                         current_time=self.__current_time)
         self.__set_next_arrival_job(gid=gid)
 
         self.__trace_update(verbose=verbose,

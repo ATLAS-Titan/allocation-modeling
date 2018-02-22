@@ -10,7 +10,7 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Author(s):
-# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
+# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017-2018
 #
 
 from collections import defaultdict
@@ -21,6 +21,19 @@ try:
     from ..policy import QUEUE_POLICY
 except ImportError:
     QUEUE_POLICY = {}
+
+
+def fifo_queue_append(queue, element):
+    queue.append(element)
+
+
+def priority_queue_append(queue, element):
+    element_idx = 0
+    for idx in xrange(len(queue) - 1, -1, -1):
+        if queue[idx].priority >= element.priority:
+            element_idx = idx + 1
+            break
+    queue.insert(element_idx, element)
 
 
 class Queue(object):
@@ -38,6 +51,13 @@ class Queue(object):
         @param with_buffer: Flag to use buffer (instead of drop the job).
         @type with_buffer: bool
         """
+        if self.__discipline == QueueDiscipline.FIFO:
+            self.__queue_append = fifo_queue_append
+        elif self.__discipline == QueueDiscipline.Priority:
+            self.__queue_append = priority_queue_append
+        else:
+            raise Exception('Queue discipline is unknown.')
+
         self.__data = []
         self.__latest_queued_timestamp = 0.
 
@@ -190,10 +210,12 @@ class Queue(object):
         """
         return [] if self.__num_dropped is None else self.__num_dropped.items()
 
-    def __pre_processing(self, current_time):
+    def __process_approved_job(self, job, current_time):
         """
-        Make some updates before the element (job) will be processed.
+        Process element that is approved to be added to the queue.
 
+        @param job: Job object.
+        @type job: qss.core.job.Job
         @param current_time: Current time (timestamp from 0 to now).
         @type current_time: float
         """
@@ -201,21 +223,10 @@ class Queue(object):
             time_delta = current_time - self.__latest_queued_timestamp
             for element in self.__data:
                 element.increase_priority(value=time_delta)
+            self.__latest_queued_timestamp = current_time
 
-        self.__latest_queued_timestamp = current_time
-
-    def __process_approved_job(self, job):
-        """
-        Process element that is approved to be added to the queue.
-
-        @param job: Job object.
-        @type job: qss.core.job.Job
-        """
-        self.__data.append(job)
+        self.__queue_append(self.__data, job)
         self.__increase_num_labeled_jobs(label=job.source_label)
-
-        if self.__discipline == QueueDiscipline.Priority:
-            self.__data.sort(key=lambda x: x.priority, reverse=True)
 
     def __process_rejected_job(self, job):
         """
@@ -249,17 +260,15 @@ class Queue(object):
             for label in self.__num_dropped:
                 self.__num_dropped[label] = 0
 
-    def add(self, current_time, job):
+    def add(self, job, current_time):
         """
         Add element (job) to the queue.
 
-        @param current_time: Current time (timestamp from 0 to now).
-        @type current_time: float
         @param job: Job object.
         @type job: qss.core.job.Job
+        @param current_time: Current time (timestamp from 0 to now).
+        @type current_time: float
         """
-        self.__pre_processing(current_time=current_time)
-
         with_limit, has_free_spots = False, True
 
         if '_total' in self.__limit_policy:
@@ -274,7 +283,7 @@ class Queue(object):
             with_limit = True
 
         if not with_limit or has_free_spots:
-            self.__process_approved_job(job=job)
+            self.__process_approved_job(job=job, current_time=current_time)
         elif with_limit:
             self.__process_rejected_job(job=job)
 
@@ -301,7 +310,7 @@ class Queue(object):
 
         # get the job (of the defined label) from the buffer
         if self.get_num_labeled_jobs(label=output.source_label, in_buffer=True):
-            self.add(current_time=current_time,
-                     job=self.__buffer_by_label[output.source_label].pop(0))
+            self.add(job=self.__buffer_by_label[output.source_label].pop(0),
+                     current_time=current_time)
 
         return output
