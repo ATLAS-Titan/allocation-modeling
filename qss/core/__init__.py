@@ -12,4 +12,4 @@
 
 from .job import Job
 from .node import NodeManager
-from .queue import Queue
+from .queue import Queue, QueueDiscipline
