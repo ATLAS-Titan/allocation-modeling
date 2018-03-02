@@ -13,38 +13,37 @@
 # - Mikhail Titov, <mikhail.titov@cern.ch>, 2017-2018
 #
 
-from qss.core import QueueDiscipline
-
 from .constants import StreamName
+from .core import QueueDiscipline
+
+
+def priority_queue_job_init(job):
+    """
+    Set initial priority parameters (group and priority).
+
+    @param job: Job object.
+    @type job: qss.core.job.Job
+    """
+    priority_groups = {
+        (1, 125): {'group': 5, 'priority': 0.},
+        (126, 312): {'group': 4, 'priority': 0.},
+        (313, 3749): {'group': 3, 'priority': 0.},
+        (3750, 11249): {'group': 2, 'priority': 432000.},  # 5 days
+        (11250,): {'group': 1, 'priority': 1296000.}  # 15 days
+    }
+
+    for k, v in priority_groups.items():
+        if ((len(k) == 1 and job.num_nodes >= k[0]) or
+                (len(k) == 2 and k[0] <= job.num_nodes <= k[1])):
+            job.group = v['group']
+            job.priority = v['priority']
+            break
 
 
 QUEUE_POLICY = {
-    'discipline': QueueDiscipline.FIFO,
     'limit': {
         StreamName.Main: 4
-    }
-}
-
-JOB_POLICY = {
-    'priority': [
-        {'num_nodes_range': (1, 125),
-         'group': 5,
-         'base_priority': 0.},
-
-        {'num_nodes_range': (126, 312),
-         'group': 4,
-         'base_priority': 0.},
-
-        {'num_nodes_range': (313, 3749),
-         'group': 3,
-         'base_priority': 0.},
-
-        {'num_nodes_range': (3750, 11249),
-         'group': 2,
-         'base_priority': 432000.},  # 5 days
-
-        {'num_nodes_range': (11250,),
-         'group': 1,
-         'base_priority': 1296000.}  # 15 days
-    ]
+    },
+    'discipline': QueueDiscipline.Priority,
+    'job_init': priority_queue_job_init
 }

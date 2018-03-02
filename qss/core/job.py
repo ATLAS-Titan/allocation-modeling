@@ -13,11 +13,6 @@
 # - Mikhail Titov, <mikhail.titov@cern.ch>, 2017-2018
 #
 
-try:
-    from ..policy import JOB_POLICY
-except ImportError:
-    JOB_POLICY = {}
-
 
 class Job(object):
 
@@ -47,9 +42,6 @@ class Job(object):
 
         self.group = None
         self.priority = kwargs.get('priority', 0.)
-
-        # priority policy
-        self.set_priority_by_policy(priority_groups=JOB_POLICY.get('priority'))
 
     @property
     def release_timestamp(self):
@@ -83,33 +75,6 @@ class Job(object):
         """
         if self.arrival_timestamp and self.submission_timestamp:
             return self.wait_time + self.execution_time
-
-    def set_priority_by_policy(self, priority_groups):
-        """
-        Set initial priority parameters (group and priority).
-
-        @param priority_groups: List of groups with defined base priority.
-        @type priority_groups: list
-        """
-        if not priority_groups:
-            return
-
-        for group in priority_groups:
-
-            if not group['num_nodes_range']:
-                continue
-
-            if len(group['num_nodes_range']) < 2:
-                min_num, max_num = group['num_nodes_range'][0], None
-            else:
-                min_num, max_num = group['num_nodes_range']
-
-            if ((max_num and self.num_nodes > max_num)
-                    or (min_num and self.num_nodes < min_num)):
-                continue
-
-            self.group = group['group']
-            self.priority += group['base_priority']
 
     def increase_priority(self, value):
         """

@@ -62,6 +62,13 @@ class Queue(object):
         else:
             raise Exception('Queue discipline is unknown.')
 
+        if policy.get('job_init'):
+            self.__job_init = policy['job_init']
+        else:
+            def job_init_dummy(job):
+                pass
+            self.__job_init = job_init_dummy
+
         self.__limit_policy = policy.get('limit', {})
         if total_limit:
             self.__limit_policy['_total'] = total_limit
@@ -224,7 +231,8 @@ class Queue(object):
                 element.increase_priority(value=time_delta)
             self.__latest_queued_timestamp = current_time
 
-        self.__queue_append(self.__data, job)
+        self.__job_init(job=job)
+        self.__queue_append(queue=self.__data, element=job)
         self.__increase_num_labeled_jobs(label=job.source_label)
 
     def __process_rejected_job(self, job):
