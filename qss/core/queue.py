@@ -38,8 +38,6 @@ def priority_queue_append(queue, element):
 
 class Queue(object):
 
-    __discipline = QueueDiscipline.FIFO
-
     def __init__(self, policy=None, total_limit=None, with_buffer=False):
         """
         Initialization (limits are applied to the queue excluding the buffer).
@@ -51,17 +49,18 @@ class Queue(object):
         @param with_buffer: Flag to use buffer (instead of drop the job).
         @type with_buffer: bool
         """
+        self.__data = []
+        self.__latest_queued_timestamp = 0.
+
+        policy = policy or QUEUE_POLICY
+
+        self.__discipline = policy.get('discipline', QueueDiscipline.FIFO)
         if self.__discipline == QueueDiscipline.FIFO:
             self.__queue_append = fifo_queue_append
         elif self.__discipline == QueueDiscipline.Priority:
             self.__queue_append = priority_queue_append
         else:
             raise Exception('Queue discipline is unknown.')
-
-        self.__data = []
-        self.__latest_queued_timestamp = 0.
-
-        policy = policy or QUEUE_POLICY
 
         self.__limit_policy = policy.get('limit', {})
         if total_limit:

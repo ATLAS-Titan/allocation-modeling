@@ -10,13 +10,16 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Author(s):
-# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
+# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017-2018
 #
+
+from qss.core import QueueDiscipline
 
 from .constants import StreamName
 
 
 QUEUE_POLICY = {
+    'discipline': QueueDiscipline.FIFO,
     'limit': {
         StreamName.Main: 4
     }
