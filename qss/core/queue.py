@@ -36,24 +36,34 @@ def priority_queue_append(queue, element):
     queue.insert(element_idx, element)
 
 
-class Queue(object):
+class QueueManager(object):
 
-    def __init__(self, policy=None, total_limit=None, with_buffer=False):
+    """Class QueueManager is responsible to control and manage the queue."""
+
+    def __init__(self, limit=None, policy=None, with_buffer=False):
         """
         Initialization (limits are applied to the queue excluding the buffer).
 
+        @param limit: Maximum (total) number of jobs in the queue.
+        @type limit: int/None
         @param policy: Policy for queue behaviour.
         @type policy: dict/None
-        @param total_limit: Maximum number of jobs in the queue.
-        @type total_limit: int/None
         @param with_buffer: Flag to use buffer (instead of drop the job).
         @type with_buffer: bool
         """
-        self.__data = []
+        self.__queue = []
         self.__latest_queued_timestamp = 0.
+
+        self.__num_labeled_jobs = defaultdict(int)
 
         policy = policy or QUEUE_POLICY
 
+        # queue limits
+        self.__limits = policy.get('limit', {})
+        if limit:
+            self.__limits['_total'] = limit
+
+        # queue discipline
         self.__discipline = policy.get('discipline', QueueDiscipline.FIFO)
         if self.__discipline == QueueDiscipline.FIFO:
             self.__queue_append = fifo_queue_append
@@ -62,6 +72,7 @@ class Queue(object):
         else:
             raise Exception('Queue discipline is unknown.')
 
+        # set method for initialization of the new job in the queue
         if policy.get('job_init'):
             self.__job_init = policy['job_init']
         else:
@@ -69,18 +80,13 @@ class Queue(object):
                 pass
             self.__job_init = job_init_dummy
 
-        self.__limit_policy = policy.get('limit', {})
-        if total_limit:
-            self.__limit_policy['_total'] = total_limit
-
-        self.__num_labeled_jobs = defaultdict(int)
-
+        # buffer set up
         if with_buffer:
-            self.__buffer_by_label = defaultdict(list)
+            self.__buffer = defaultdict(list)
             self.__num_dropped = None
         else:
+            self.__buffer = None
             self.__num_dropped = defaultdict(int, {'_total': 0})
-            self.__buffer_by_label = None
 
     @property
     def is_empty(self):
@@ -90,7 +96,7 @@ class Queue(object):
         @return: Flag that queue is empty.
         @rtype: bool
         """
-        return True if not self.__data else False
+        return True if not self.__queue else False
 
     @property
     def length(self):
@@ -100,7 +106,7 @@ class Queue(object):
         @return: Number of jobs.
         @rtype: int
         """
-        return len(self.__data)
+        return len(self.__queue)
 
     @property
     def length_buffer(self):
@@ -112,15 +118,15 @@ class Queue(object):
         """
         output = 0
 
-        if self.__buffer_by_label is not None:
-            output = sum(map(lambda x: len(x), self.__buffer_by_label.values()))
+        if self.__buffer is not None:
+            output = sum(map(lambda x: len(x), self.__buffer.values()))
 
         return output
 
     @property
     def length_total(self):
         """
-        Get the number of all jobs in the queue and its buffer.
+        Get the number of all jobs in the queue and in the buffer.
 
         @return: Number of jobs.
         @rtype: int
@@ -142,9 +148,8 @@ class Queue(object):
             output = self.__num_labeled_jobs[label]
         else:
             output = 0
-            if (self.__buffer_by_label is not None
-                    and label in self.__buffer_by_label):
-                output = len(self.__buffer_by_label[label])
+            if self.__buffer is not None and label in self.__buffer:
+                output = len(self.__buffer[label])
 
         return output
 
@@ -161,9 +166,8 @@ class Queue(object):
             output = self.__num_labeled_jobs.items()
         else:
             output = []
-            if self.__buffer_by_label is not None:
-                output = map(lambda (k, v): (k, len(v)),
-                             self.__buffer_by_label.items())
+            if self.__buffer is not None:
+                output = map(lambda (k, v): (k, len(v)), self.__buffer.items())
 
         return output
 
@@ -227,12 +231,12 @@ class Queue(object):
         """
         if self.__discipline == QueueDiscipline.Priority:
             time_delta = current_time - self.__latest_queued_timestamp
-            for element in self.__data:
+            for element in self.__queue:
                 element.increase_priority(value=time_delta)
             self.__latest_queued_timestamp = current_time
 
         self.__job_init(job=job)
-        self.__queue_append(queue=self.__data, element=job)
+        self.__queue_append(queue=self.__queue, element=job)
         self.__increase_num_labeled_jobs(label=job.source_label)
 
     def __process_rejected_job(self, job):
@@ -242,8 +246,8 @@ class Queue(object):
         @param job: Job object.
         @type job: qss.core.job.Job
         """
-        if self.__buffer_by_label is not None:
-            self.__buffer_by_label[job.source_label].append(job)
+        if self.__buffer is not None:
+            self.__buffer[job.source_label].append(job)
 
         elif self.__num_dropped is not None:
             self.__num_dropped[job.source_label] += 1
@@ -253,15 +257,15 @@ class Queue(object):
         """
         Reset parameters.
         """
-        del self.__data[:]
+        del self.__queue[:]
         self.__latest_queued_timestamp = 0.
 
         for label in self.__num_labeled_jobs:
             self.__num_labeled_jobs[label] = 0
 
-        if self.__buffer_by_label is not None:
-            for label in self.__buffer_by_label:
-                del self.__buffer_by_label[label][:]
+        if self.__buffer is not None:
+            for label in self.__buffer:
+                del self.__buffer[label][:]
 
         if self.__num_dropped is not None:
             for label in self.__num_dropped:
@@ -278,13 +282,13 @@ class Queue(object):
         """
         with_limit, has_free_spots = False, True
 
-        if '_total' in self.__limit_policy:
-            if (self.__limit_policy['_total'] - self.length) < 1:
+        if '_total' in self.__limits:
+            if (self.__limits['_total'] - self.length) < 1:
                 has_free_spots = False
             with_limit = True
 
-        if has_free_spots and job.source_label in self.__limit_policy:
-            if (self.__limit_policy[job.source_label] -
+        if has_free_spots and job.source_label in self.__limits:
+            if (self.__limits[job.source_label] -
                     self.get_num_labeled_jobs(label=job.source_label)) < 1:
                 has_free_spots = False
             with_limit = True
@@ -301,7 +305,7 @@ class Queue(object):
         @return: Job object.
         @rtype: qss.core.job.Job
         """
-        return self.__data[0]
+        return self.__queue[0]
 
     def get_next(self, current_time):
         """
@@ -312,12 +316,12 @@ class Queue(object):
         @return: Job object.
         @rtype: qss.core.job.Job
         """
-        output = self.__data.pop(0)
+        output = self.__queue.pop(0)
         self.__decrease_num_labeled_jobs(label=output.source_label)
 
         # get the job (of the defined label) from the buffer
         if self.get_num_labeled_jobs(label=output.source_label, in_buffer=True):
-            self.add(job=self.__buffer_by_label[output.source_label].pop(0),
+            self.add(job=self.__buffer[output.source_label].pop(0),
                      current_time=current_time)
 
         return output
