@@ -10,7 +10,7 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Author(s):
-# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
+# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017-2018
 #
 
 import math
@@ -27,7 +27,8 @@ NUM_NODES_DEFAULT = 1
 
 
 def stream_generator(arrival_rate, execution_rate, num_nodes=None,
-                     source_label=None, num_jobs=None, time_limit=None):
+                     source_label=None, first_arrival_timestamp=None,
+                     num_jobs=None, time_limit=None):
     """
     Yield jobs with randomly generated arrival and service times.
 
@@ -39,6 +40,8 @@ def stream_generator(arrival_rate, execution_rate, num_nodes=None,
     @type num_nodes: int/None
     @param source_label: Name of the job's source.
     @type source_label: str/None
+    @param first_arrival_timestamp: Initial (first) arrival timestamp.
+    @type first_arrival_timestamp: float
     @param num_jobs: Number of generated jobs (None -> infinite jobs).
     @type: num_jobs: int/None
     @param time_limit: The maximum timestamp (until generation is done).
@@ -55,7 +58,7 @@ def stream_generator(arrival_rate, execution_rate, num_nodes=None,
     def get_random(rate):
         return (-1. / rate) * math.log(1. - random.random())
 
-    next_arrival_timestamp = get_random(arrival_rate)
+    next_arrival_timestamp = first_arrival_timestamp or get_random(arrival_rate)
     while num_jobs or (time_limit and next_arrival_timestamp < time_limit):
 
         yield Job(arrival_timestamp=next_arrival_timestamp,
