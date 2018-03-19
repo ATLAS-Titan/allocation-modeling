@@ -17,11 +17,6 @@ from collections import defaultdict
 
 from .constants import QueueDiscipline
 
-try:
-    from ..policy import QUEUE_POLICY
-except ImportError:
-    QUEUE_POLICY = {}
-
 
 def fifo_queue_append(queue, element):
     queue.append(element)
@@ -40,14 +35,14 @@ class QueueManager(object):
 
     """Class QueueManager is responsible to control and manage the queue."""
 
-    def __init__(self, limit=None, policy=None, with_buffer=False):
+    def __init__(self, policy=None, limit=None, with_buffer=False):
         """
         Initialization (limits are applied to the queue excluding the buffer).
 
-        @param limit: Maximum (total) number of jobs in the queue.
-        @type limit: int/None
         @param policy: Policy for queue behaviour.
         @type policy: dict/None
+        @param limit: Maximum (total) number of jobs in the queue.
+        @type limit: int/None
         @param with_buffer: Flag to use buffer (instead of drop the job).
         @type with_buffer: bool
         """
@@ -56,7 +51,7 @@ class QueueManager(object):
 
         self.__num_labeled_jobs = defaultdict(int)
 
-        policy = policy or QUEUE_POLICY
+        policy = policy or {}
 
         # queue limits
         self.__limits = policy.get('limit', {})

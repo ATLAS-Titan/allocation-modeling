@@ -19,6 +19,11 @@ from .stream import stream_generator, stream_generator_by_file
 from .core import QueueManager, NodeManager
 from .core.constants import ActionCode, ServiceState
 
+try:
+    from .policy import QUEUE_POLICY
+except ImportError:
+    QUEUE_POLICY = {}
+
 
 class QSS(object):
 
@@ -49,7 +54,8 @@ class QSS(object):
         self.__job_generators = []
         self.__input_jobs = []
 
-        self.__queue = QueueManager(limit=queue_limit,
+        self.__queue = QueueManager(policy=QUEUE_POLICY,
+                                    limit=queue_limit,
                                     with_buffer=use_queue_buffer)
 
         self.__node_manager = NodeManager(num_nodes=num_nodes)
