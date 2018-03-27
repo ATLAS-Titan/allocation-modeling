@@ -10,7 +10,7 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Author(s):
-# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
+# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017-2018
 # - Alexey Poyda, <poyda@wdcb.ru>, 2017
 #
 
@@ -375,7 +375,7 @@ class QSS(object):
             self.get_avg_len_queue())
         print 'AVG delay: {0}'.format(self.get_avg_delay())
 
-        print 'Utilization (nodes x secs): {0}'.format(
+        print 'Utilization (nodes x time units): {0}'.format(
             self.get_utilization_value())
 
         if self.__queue.num_dropped:
