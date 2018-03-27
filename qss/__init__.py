@@ -375,6 +375,9 @@ class QSS(object):
             self.get_avg_len_queue())
         print 'AVG delay: {0}'.format(self.get_avg_delay())
 
+        print 'Utilization (nodes x secs): {0}'.format(
+            self.get_utilization_value())
+
         if self.__queue.num_dropped:
             print 'Queue drop rate: {0}'.format(
                 float(self.__queue.num_dropped) /
