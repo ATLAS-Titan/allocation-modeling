@@ -225,19 +225,21 @@ class QSS(object):
         @param verbose: Flag to get (show) logs.
         @type verbose: bool
         """
-        self.__output.extend(self.__node_manager.stop_processing(
-            current_time=self.__current_time))
+        completed_jobs = self.__node_manager.stop_processing(
+            current_time=self.__current_time)
 
-        if self.__output_file and self.__output:
-            job = self.__output[-1]
+        self.__output.extend(completed_jobs)
+
+        if self.__output_file and completed_jobs:
             with open(self.__output_file, 'a') as f:
-                f.write(','.join([
-                    str(job.arrival_timestamp),
-                    str(job.submission_timestamp),
-                    str(job.release_timestamp),
-                    str(job.num_nodes),
-                    job.source_label
-                ]) + '\n')
+                for job in completed_jobs:
+                    f.write(','.join([
+                        str(job.arrival_timestamp),
+                        str(job.submission_timestamp),
+                        str(job.release_timestamp),
+                        str(job.num_nodes),
+                        job.source_label
+                    ]) + '\n')
 
         self.__trace_update(verbose=verbose,
                             action_code=ActionCode.Completion)
