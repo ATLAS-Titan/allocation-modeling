@@ -10,7 +10,7 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Author(s):
-# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
+# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017-2018
 #
 
 from ..utils import EnumTypes
@@ -20,6 +20,11 @@ ActionCode = EnumTypes(
     ('Arrival', 'a'),
     ('Submission', 's'),
     ('Completion', 'c'),
+)
+
+NodeState = EnumTypes(
+    ('Idle', 0),
+    ('Busy', 1)
 )
 
 ServiceState = EnumTypes(
