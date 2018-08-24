@@ -16,6 +16,25 @@
 from .constants import StreamName
 from .core import QueueDiscipline
 
+TITAN_NUM_NODES = 18688
+TITAN_REQUESTED_PROCESSOR_COUNT = {
+    1: {'nodes': (11250, TITAN_NUM_NODES),
+        'max_walltime': 86400.,
+        'aging_boost': 1296000.},
+    2: {'nodes': (3750, 11249),
+        'max_walltime': 86400.,
+        'aging_boost': 432000.},
+    3: {'nodes': (313, 3749),
+        'max_walltime': 43200.,
+        'aging_boost': 0.},
+    4: {'nodes': (126, 312),
+        'max_walltime': 21600.,
+        'aging_boost': 0.},
+    5: {'nodes': (1, 125),
+        'max_walltime': 7200.,
+        'aging_boost': 0.},
+}
+
 
 def priority_queue_job_init(job):
     """
@@ -24,19 +43,13 @@ def priority_queue_job_init(job):
     @param job: Job object.
     @type job: qss.core.job.Job
     """
-    priority_groups = {
-        (1, 125): {'group': 5, 'priority': 0.},
-        (126, 312): {'group': 4, 'priority': 0.},
-        (313, 3749): {'group': 3, 'priority': 0.},
-        (3750, 11249): {'group': 2, 'priority': 432000.},  # 5 days
-        (11250,): {'group': 1, 'priority': 1296000.}  # 15 days
-    }
+    if job.num_nodes > TITAN_NUM_NODES:
+        raise Exception('Number of requested nodes exceeds the total number.')
 
-    for k, v in priority_groups.items():
-        if ((len(k) == 1 and job.num_nodes >= k[0]) or
-                (len(k) == 2 and k[0] <= job.num_nodes <= k[1])):
-            job.group = v['group']
-            job.priority = v['priority']
+    for k, v in TITAN_REQUESTED_PROCESSOR_COUNT.iteritems():
+        if v['nodes'][0] <= job.num_nodes <= v['nodes'][1]:
+            job.group = k
+            job.priority = v['aging_boost']
             break
 
 
