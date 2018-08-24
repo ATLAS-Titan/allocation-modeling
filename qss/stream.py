@@ -30,7 +30,7 @@ def stream_generator(arrival_rate, execution_rate, num_nodes=None,
                      source_label=None, first_arrival_timestamp=None,
                      num_jobs=None, time_limit=None):
     """
-    Yield jobs with randomly generated arrival and service times.
+    Yield jobs with randomly generated arrival timestamp and execution time.
 
     @param arrival_rate: Arrival rate for jobs.
     @type arrival_rate: float
@@ -74,8 +74,10 @@ def stream_generator(arrival_rate, execution_rate, num_nodes=None,
 
 def stream_generator_by_file(file_name, source_label=None, time_limit=None):
     """
-    Yield jobs with specified arrival and service times.
-    (file line format: "<arrival_timestamp>,<execution_time>,<num_nodes>")
+    Yield jobs with specified parameters from the defined file.
+    (file line format:
+    1. "<arrival_timestamp>,<execution_time>,<num_nodes>"
+    2. "<arrival_timestamp>,<wall_time>,<execution_time>,<num_nodes>")
 
     @param file_name: File name with input data.
     @type file_name: str
@@ -99,20 +101,31 @@ def stream_generator_by_file(file_name, source_label=None, time_limit=None):
                 job_params = line.split(',')
 
                 try:
-                    arrival_timestamp = (
-                        float(job_params[0]) + latest_arrival_timestamp)
-                    execution_time = float(job_params[1])
-                    num_nodes = int(float(job_params[2]))
+                    arrival_timestamp = (latest_arrival_timestamp +
+                                         float(job_params[0]))
+                except ValueError:
+                    continue
+                else:
+                    if time_limit and time_limit < arrival_timestamp:
+                        break
+
+                object_options = {}
+                try:
+                    if len(job_params) == 3:
+                        object_options.update({
+                            'execution_time': float(job_params[1]),
+                            'num_nodes': int(float(job_params[2]))})
+                    elif len(job_params) == 4:
+                        object_options.update({
+                            'wall_time': float(job_params[1]),
+                            'execution_time': float(job_params[2]),
+                            'num_nodes': int(float(job_params[3]))})
                 except ValueError:
                     continue
 
-                if time_limit and arrival_timestamp > time_limit:
-                    break
-
                 yield Job(arrival_timestamp=arrival_timestamp,
-                          execution_time=execution_time,
-                          num_nodes=num_nodes,
-                          source_label=source_label)
+                          source_label=source_label,
+                          **object_options)
 
         if not time_limit or not arrival_timestamp:
             break
