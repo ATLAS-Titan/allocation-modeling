@@ -31,7 +31,7 @@ class Job(object):
         @keyword arrival_timestamp: Arrival timestamp.
         @keyword priority: Priority value.
         """
-        self.wall_time = kwargs.get('wall_time')
+        self.wall_time = kwargs.get('wall_time', execution_time)
         self.num_nodes = num_nodes
 
         self.execution_time = execution_time
