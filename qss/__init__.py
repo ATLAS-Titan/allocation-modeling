@@ -200,8 +200,7 @@ class QSS(object):
         @type verbose: bool
         """
         had_submission = False
-        while (not self.__queue.is_empty
-                and not self.__node_manager.all_nodes_busy):
+        while not self.__queue.is_empty and self.__node_manager.num_idle_nodes:
 
             if not self.__node_manager.ready_for_processing(
                     job=self.__queue.show_next()):
