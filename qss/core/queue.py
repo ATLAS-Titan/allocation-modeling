@@ -248,6 +248,21 @@ class QueueManager(object):
             self.__num_dropped[job.source_label] += 1
             self.__num_dropped['_total'] += 1
 
+    def __post_pop_labeled_job(self, label, current_time):
+        """
+        Actions after the next job is taken (pulled) from the queue.
+
+        @param label: Source label of the job.
+        @type label: str
+        @param current_time: Current time (timestamp from 0 to now).
+        @type current_time: float
+        """
+        self.__decrease_num_labeled_jobs(label=label)
+        # get the job (of the defined label) from the buffer
+        if self.get_num_labeled_jobs(label=label, in_buffer=True):
+            self.add(job=self.__buffer[label].pop(0),
+                     current_time=current_time)
+
     def reset(self):
         """
         Reset parameters.
@@ -312,11 +327,32 @@ class QueueManager(object):
         @rtype: qss.core.job.Job
         """
         output = self.__queue.pop(0)
-        self.__decrease_num_labeled_jobs(label=output.source_label)
 
-        # get the job (of the defined label) from the buffer
-        if self.get_num_labeled_jobs(label=output.source_label, in_buffer=True):
-            self.add(job=self.__buffer[output.source_label].pop(0),
-                     current_time=current_time)
+        self.__post_pop_labeled_job(label=output.source_label,
+                                    current_time=current_time)
+        return output
 
+    def pull_job(self, job_id, current_time):
+        """
+        Get (remove and return) the particular job from the queue.
+
+        @param job_id: Job id.
+        @type job_id: int
+        @param current_time: Current time (timestamp from 0 to now).
+        @type current_time: float
+        @return: Job object.
+        @rtype: qss.core.job.Job
+        """
+        output = None
+        for idx, job in enumerate(self.__queue):
+            if job_id == id(job):
+                output = self.__queue.pop(idx)
+                break
+
+        if output is None:
+            raise Exception('Defined job is not located in the queue ' +
+                            '[job_id={0}]'.format(job_id))
+
+        self.__post_pop_labeled_job(label=output.source_label,
+                                    current_time=current_time)
         return output
