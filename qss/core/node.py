@@ -72,6 +72,21 @@ class NodeManager(object):
         if self.__jobs_allocation:
             return self.__jobs_allocation[0][0].release_timestamp
 
+    def get_scheduled_release_timestamps(self):
+        """
+        Get timestamps when each busy node will release the job.
+
+        @return: Map of node ids with corresponding scheduled release timestamp.
+        @rtype: dict
+        """
+        output = {}
+
+        for job, node_ids in self.__jobs_allocation:
+            release_timestamp = job.scheduled_release_timestamp
+            output.update(dict(map(lambda x: (x, release_timestamp), node_ids)))
+
+        return output
+
     def ready_for_processing(self, job):
         """
         Check availability of nodes to start the job processing.
