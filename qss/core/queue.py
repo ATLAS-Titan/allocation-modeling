@@ -33,17 +33,15 @@ def priority_queue_append(queue, element):
 
 class QueueManager(object):
 
-    """Class QueueManager is responsible to control and manage the queue."""
-
     def __init__(self, policy=None, limit=None, with_buffer=False):
         """
-        Initialization (limits are applied to the queue excluding the buffer).
+        Initialization (limits are applied to the queue, excluding the buffer).
 
-        @param policy: Policy for queue behaviour.
+        @param policy: Policy for the queue behaviour.
         @type policy: dict/None
         @param limit: Maximum (total) number of jobs in the queue.
         @type limit: int/None
-        @param with_buffer: Flag to use buffer (instead of drop the job).
+        @param with_buffer: Flag to use the buffer (instead of dropping jobs).
         @type with_buffer: bool
         """
         self.__queue = []
@@ -82,6 +80,24 @@ class QueueManager(object):
         else:
             self.__buffer = None
             self.__num_dropped = defaultdict(int, {'_total': 0})
+
+    def reset(self):
+        """
+        Reset parameters.
+        """
+        del self.__queue[:]
+        self.__latest_queued_timestamp = 0.
+
+        for label in self.__num_labeled_jobs:
+            self.__num_labeled_jobs[label] = 0
+
+        if self.__buffer is not None:
+            for label in self.__buffer:
+                del self.__buffer[label][:]
+
+        if self.__num_dropped is not None:
+            for label in self.__num_dropped:
+                self.__num_dropped[label] = 0
 
     @property
     def is_empty(self):
@@ -263,24 +279,6 @@ class QueueManager(object):
             self.add(job=self.__buffer[label].pop(0),
                      current_time=current_time)
 
-    def reset(self):
-        """
-        Reset parameters.
-        """
-        del self.__queue[:]
-        self.__latest_queued_timestamp = 0.
-
-        for label in self.__num_labeled_jobs:
-            self.__num_labeled_jobs[label] = 0
-
-        if self.__buffer is not None:
-            for label in self.__buffer:
-                del self.__buffer[label][:]
-
-        if self.__num_dropped is not None:
-            for label in self.__num_dropped:
-                self.__num_dropped[label] = 0
-
     def add(self, job, current_time):
         """
         Add element (job) to the queue.
@@ -332,27 +330,42 @@ class QueueManager(object):
                                     current_time=current_time)
         return output
 
-    def pull_job(self, job_id, current_time):
+    def pull(self, eid, current_time, **kwargs):
         """
         Get (remove and return) the particular job from the queue.
 
-        @param job_id: Job id.
-        @type job_id: int
+        @param eid: Id of the element in the queue.
+        @type eid: int
         @param current_time: Current time (timestamp from 0 to now).
         @type current_time: float
+
+        @keyword job_id: Job id.
+
         @return: Job object.
         @rtype: qss.core.job.Job
         """
         output = None
-        for idx, job in enumerate(self.__queue):
-            if job_id == id(job):
-                output = self.__queue.pop(idx)
-                break
+
+        if kwargs.get('job_id') and id(self.__queue[eid]) != kwargs['job_id']:
+            for idx, job in enumerate(self.__queue):
+                if id(job) == kwargs['job_id']:
+                    output = self.__queue.pop(idx)
+                    break
+        else:
+            output = self.__queue.pop(eid)
 
         if output is None:
-            raise Exception('Defined job is not located in the queue ' +
-                            '[job_id={0}]'.format(job_id))
+            raise Exception('Defined job is not found in the queue.')
 
         self.__post_pop_labeled_job(label=output.source_label,
                                     current_time=current_time)
         return output
+
+    def iterator(self):
+        """
+        Get the iterator over the queue .
+
+        @return: Queue iterator.
+        @rtype: iterator
+        """
+        return iter(self.__queue)
