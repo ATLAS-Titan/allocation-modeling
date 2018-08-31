@@ -55,6 +55,17 @@ class Job(object):
             return self.submission_timestamp + self.execution_time
 
     @property
+    def scheduled_release_timestamp(self):
+        """
+        Get timestamp of the scheduled job release (based on wall_time).
+
+        @return: Scheduled release timestamp.
+        @rtype: float
+        """
+        if self.submission_timestamp:
+            return self.submission_timestamp + self.wall_time
+
+    @property
     def wait_time(self):
         """
         Get job wait time (queue time).
