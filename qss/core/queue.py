@@ -14,6 +14,7 @@
 #
 
 from collections import defaultdict
+from itertools import islice
 
 from .constants import QueueDiscipline
 
@@ -346,13 +347,16 @@ class QueueManager(object):
         """
         output = None
 
-        if kwargs.get('job_id') and id(self.__queue[eid]) != kwargs['job_id']:
+        job_id, max_eid = kwargs.get('job_id'), len(self.__queue) - 1
+        if job_id and (eid > max_eid or id(self.__queue[eid]) != job_id):
             for idx, job in enumerate(self.__queue):
-                if id(job) == kwargs['job_id']:
+                if id(job) == job_id:
                     output = self.__queue.pop(idx)
                     break
-        else:
+        elif eid <= max_eid:
             output = self.__queue.pop(eid)
+        else:
+            raise Exception('Defined job can not be located in the queue.')
 
         if output is None:
             raise Exception('Defined job is not found in the queue.')
@@ -361,11 +365,14 @@ class QueueManager(object):
                                     current_time=current_time)
         return output
 
-    def iterator(self):
+    def iterator(self, limit=None):
         """
         Get the iterator over the queue .
 
+        @param limit: The number of elements to go through.
+        @type limit: int/None
         @return: Queue iterator.
         @rtype: iterator
         """
-        return iter(self.__queue)
+        limit = len(self.__queue) if limit is None else limit
+        return islice(self.__queue, limit)
