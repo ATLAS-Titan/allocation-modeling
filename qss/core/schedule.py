@@ -99,6 +99,8 @@ class NodeSchedule(object):
 
             if idle_start_timestamp < record[0]:
                 output.append(tuple([idle_start_timestamp, record[0]]))
+            elif record[1] < idle_start_timestamp:
+                continue
             idle_start_timestamp = record[1]
 
         output.append(tuple([idle_start_timestamp]))
