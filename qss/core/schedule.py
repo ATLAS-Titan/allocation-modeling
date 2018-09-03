@@ -171,48 +171,7 @@ class ScheduleManager(object):
         self.__num_idle_nodes_now = num_nodes
         self.__current_time = 0.
 
-    @staticmethod
-    def get_backfill_max_element_id(queue_iterator, num_idle_nodes):
-        """
-        Get the max element id in the queue that is a potential backfill job.
-
-        @param queue_iterator: Queue iterator.
-        @type queue_iterator: iterator
-        @param num_idle_nodes: The number of idle nodes (available for jobs).
-        @type num_idle_nodes: int
-        @return: Element [max] id in the queue.
-        @rtype: int/None
-        """
-        output = None
-
-        for eid, job in enumerate(queue_iterator):
-            if num_idle_nodes >= job.num_nodes:
-                output = eid
-
-        return output
-
-    def set_initial_busy_times(self, node_release_timestamps, current_time):
-        """
-        Set the first busy time period for corresponding schedules.
-
-        @param node_release_timestamps: Timestamps when busy node will be idle.
-        @type node_release_timestamps: dict
-        @param current_time: Current time (timestamp from 0 to now).
-        @type current_time: float
-        """
-        for sched_id, schedule in enumerate(self.__schedules):
-            if sched_id in node_release_timestamps:
-                schedule.set_initial_busy_time(
-                    start_timestamp=current_time,
-                    end_timestamp=node_release_timestamps[sched_id])
-            else:
-                schedule.reset()
-
-        self.__num_idle_nodes_now = \
-            len(self.__schedules) - len(node_release_timestamps)
-        self.__current_time = current_time
-
-    def get_schedule_parameters(self, job):
+    def __get_schedule_parameters(self, job):
         """
         Get parameters to insert the job into schedules.
 
@@ -274,22 +233,69 @@ class ScheduleManager(object):
 
         return start_timestamp, schedule_ids
 
-    def get_backfill_elements(self, queue_iterator):
+    @staticmethod
+    def get_backfill_max_element_id(queue_iterator, num_idle_nodes):
+        """
+        Get the max element id in the queue that is a potential backfill job.
+
+        @param queue_iterator: Queue iterator.
+        @type queue_iterator: iterator
+        @param num_idle_nodes: The number of idle nodes (available for jobs).
+        @type num_idle_nodes: int
+        @return: Element [max] id in the queue.
+        @rtype: int/None
+        """
+        output = None
+
+        for eid, job in enumerate(queue_iterator):
+            if num_idle_nodes >= job.num_nodes:
+                output = eid
+
+        return output
+
+    def set_initial_busy_times(self, node_release_timestamps, current_time):
+        """
+        Set the first busy time period for corresponding schedules.
+
+        @param node_release_timestamps: Timestamps when busy node will be idle.
+        @type node_release_timestamps: dict
+        @param current_time: Current time (timestamp from 0 to now).
+        @type current_time: float
+        """
+        self.__current_time = current_time
+
+        for sched_id, schedule in enumerate(self.__schedules):
+            if sched_id in node_release_timestamps:
+                schedule.set_initial_busy_time(
+                    start_timestamp=self.__current_time,
+                    end_timestamp=node_release_timestamps[sched_id])
+            else:
+                schedule.reset()
+
+        self.__num_idle_nodes_now = \
+            len(self.__schedules) - len(node_release_timestamps)
+
+    def get_backfill_elements(self, queue_iterator, current_time=None):
         """
         Get elements (ids) for backfill mode.
 
         @param queue_iterator: Queue iterator.
         @type queue_iterator: iterator
+        @param current_time: Current time (timestamp from 0 to now).
+        @type current_time: float/None
         @return: List of ids (eid, job_id).
         @rtype: list
         """
+        if current_time is not None:
+            self.__current_time = current_time
+
         output = []
 
         if self.__num_idle_nodes_now:
             for eid, job in enumerate(queue_iterator):
 
                 start_timestamp, schedule_ids = \
-                    self.get_schedule_parameters(job=job)
+                    self.__get_schedule_parameters(job=job)
 
                 if start_timestamp:
                     end_timestamp = start_timestamp + job.wall_time
@@ -304,8 +310,6 @@ class ScheduleManager(object):
                     if start_timestamp == self.__current_time:
                         output.append((eid, job_id))
                         self.__num_idle_nodes_now -= len(schedule_ids)
-
-                        print eid, job_id, job.num_nodes
 
                 if not self.__num_idle_nodes_now:
                     break
