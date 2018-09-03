@@ -307,6 +307,15 @@ class QueueManager(object):
         elif with_limit:
             self.__process_rejected_job(job=job)
 
+    def show_last(self):
+        """
+        Show the last job in the queue (without removing it from the queue).
+
+        @return: Job object.
+        @rtype: qss.core.job.Job
+        """
+        return self.__queue[-1]
+
     def show_next(self):
         """
         Show the next available job without removing it from the queue.
