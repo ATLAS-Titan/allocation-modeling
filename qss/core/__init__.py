@@ -13,3 +13,4 @@
 from .job import Job
 from .node import NodeManager
 from .queue import QueueManager, QueueDiscipline
+from .schedule import ScheduleManager

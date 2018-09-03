@@ -16,7 +16,7 @@
 
 from .stream import stream_generator, stream_generator_by_file
 
-from .core import QueueManager, NodeManager
+from .core import QueueManager, NodeManager, ScheduleManager
 from .core.constants import ActionCode, ServiceState
 
 try:
@@ -29,7 +29,8 @@ class QSS(object):
 
     """Queueing System Simulator."""
 
-    def __init__(self, num_nodes, queue_limit=None, use_queue_buffer=False,
+    def __init__(self, num_nodes, queue_limit=None,
+                 use_queue_buffer=False, use_scheduler=False,
                  time_limit=None, output_file=None, trace_file=None):
         """
         Initialization.
@@ -38,8 +39,10 @@ class QSS(object):
         @type num_nodes: int
         @param queue_limit: Maximum number of elements (jobs) in queue.
         @type queue_limit: int/None
-        @param use_queue_buffer: Flag to use queue buffer (if it's necessary).
+        @param use_queue_buffer: Flag to use queue buffer (if it is necessary).
         @type use_queue_buffer: bool
+        @param use_scheduler: Flag to use Scheduler (backfill mode).
+        @type use_scheduler: bool
         @param time_limit: The maximum timestamp (until simulator is done).
         @type time_limit: float/None
         @param output_file: Name of file for output (addon for output_channel).
@@ -59,6 +62,9 @@ class QSS(object):
                                     with_buffer=use_queue_buffer)
 
         self.__node_manager = NodeManager(num_nodes=num_nodes)
+
+        self.__scheduler = ScheduleManager(num_nodes=num_nodes) \
+            if use_scheduler else None
 
         self.__output = []
         self.__trace = []
@@ -204,11 +210,42 @@ class QSS(object):
 
             if not self.__node_manager.ready_for_processing(
                     job=self.__queue.show_next()):
+
+                if self.__scheduler is not None:
+
+                    max_element_id = \
+                        self.__scheduler.get_backfill_max_element_id(
+                            queue_iterator=self.__queue.iterator(),
+                            num_idle_nodes=self.__node_manager.num_idle_nodes)
+
+                    if max_element_id is None:
+                        break
+
+                    self.__scheduler.set_initial_busy_times(
+                        node_release_timestamps=
+                        self.__node_manager.get_scheduled_release_timestamps(),
+                        current_time=self.__current_time)
+
+                    queue_limit = max_element_id + 1
+                    backfill_elements = self.__scheduler.get_backfill_elements(
+                        queue_iterator=self.__queue.iterator(limit=queue_limit))
+
+                    for eid, job_id in backfill_elements:
+                        self.__node_manager.start_processing(
+                            job=self.__queue.pull(
+                                eid=eid,
+                                job_id=job_id,
+                                current_time=self.__current_time),
+                            current_time=self.__current_time)
+
+                    if backfill_elements and not had_submission:
+                        had_submission = True
+
                 break
 
             self.__node_manager.start_processing(
-                current_time=self.__current_time,
-                job=self.__queue.get_next(current_time=self.__current_time))
+                job=self.__queue.get_next(current_time=self.__current_time),
+                current_time=self.__current_time)
 
             if not had_submission:
                 had_submission = True
