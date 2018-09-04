@@ -65,6 +65,7 @@ class QSS(object):
 
         self.__scheduler = ScheduleManager(num_nodes=num_nodes) \
             if use_scheduler else None
+        self.__schedule_recreation = False
 
         self.__output = []
         self.__trace = []
@@ -191,9 +192,18 @@ class QSS(object):
         @type verbose: bool
         """
         gid = self.__next_arrival_params()[0]
-        self.__queue.add(job=self.__input_jobs[gid],
-                         current_time=self.__current_time)
+        job = self.__input_jobs[gid]
+
+        self.__queue.add(job=job, current_time=self.__current_time)
         self.__set_next_arrival_job(gid=gid)
+
+        if self.__scheduler is not None:
+            self.__scheduler.add(job=job, current_time=self.__current_time)
+
+            job_id = id(job)
+            if (id(self.__queue.show_last()) != job_id
+                    and job_id not in self.__scheduler.next_scheduled_job_ids):
+                self.__schedule_recreation = True
 
         self.__trace_update(verbose=verbose,
                             action_code=ActionCode.Arrival)
@@ -206,49 +216,54 @@ class QSS(object):
         @type verbose: bool
         """
         had_submission = False
-        while not self.__queue.is_empty and self.__node_manager.num_idle_nodes:
 
-            if not self.__node_manager.ready_for_processing(
-                    job=self.__queue.show_next()):
+        if self.__scheduler is not None:
 
-                if self.__scheduler is not None:
+            if self.__schedule_recreation:
 
-                    max_element_id = \
-                        self.__scheduler.get_backfill_max_element_id(
-                            queue_iterator=self.__queue.iterator(),
-                            num_idle_nodes=self.__node_manager.num_idle_nodes)
+                self.__scheduler.set_initial_busy_times(
+                    node_release_timestamps=
+                    self.__node_manager.get_scheduled_release_timestamps(),
+                    current_time=self.__current_time)
+                self.__scheduler.create_schedule_by_queue(
+                    queue_iterator=self.__queue.iterator())
 
-                    if max_element_id is None:
-                        break
+                self.__schedule_recreation = False
 
-                    self.__scheduler.set_initial_busy_times(
-                        node_release_timestamps=
-                        self.__node_manager.get_scheduled_release_timestamps(),
-                        current_time=self.__current_time)
+                if verbose:
+                    print 'Schedule is re-created.'
 
-                    queue_limit = max_element_id + 1
-                    backfill_elements = self.__scheduler.get_backfill_elements(
-                        queue_iterator=self.__queue.iterator(limit=queue_limit))
-
-                    for eid, job_id in backfill_elements:
-                        self.__node_manager.start_processing(
-                            job=self.__queue.pull(
-                                eid=eid,
-                                job_id=job_id,
-                                current_time=self.__current_time),
-                            current_time=self.__current_time)
-
-                    if backfill_elements and not had_submission:
-                        had_submission = True
-
-                break
-
-            self.__node_manager.start_processing(
-                job=self.__queue.get_next(current_time=self.__current_time),
+            scheduled_elements = self.__scheduler.get_scheduled_elements(
                 current_time=self.__current_time)
 
-            if not had_submission:
+            for job_id, node_ids in scheduled_elements:
+
+                self.__node_manager.assign_processing(
+                    job=self.__queue.pull(
+                        eid=0,
+                        job_id=job_id,
+                        current_time=self.__current_time),
+                    node_ids=node_ids,
+                    current_time=self.__current_time)
+
+            if scheduled_elements and not had_submission:
                 had_submission = True
+
+        else:
+
+            while (not self.__queue.is_empty
+                   and self.__node_manager.num_idle_nodes):
+
+                if not self.__node_manager.ready_for_processing(
+                        job=self.__queue.show_next()):
+                    break
+
+                self.__node_manager.start_processing(
+                    job=self.__queue.get_next(current_time=self.__current_time),
+                    current_time=self.__current_time)
+
+                if not had_submission:
+                    had_submission = True
 
         if had_submission:
             self.__trace_update(verbose=verbose,
@@ -263,6 +278,12 @@ class QSS(object):
         """
         completed_jobs = self.__node_manager.stop_processing(
             current_time=self.__current_time)
+
+        if self.__scheduler is not None:
+            for job in completed_jobs:
+                if job.scheduled_release_timestamp != job.release_timestamp:
+                    self.__schedule_recreation = True
+                    break
 
         self.__output.extend(completed_jobs)
 
