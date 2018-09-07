@@ -21,48 +21,13 @@ class NodeSchedule(object):
         """
         Initialization.
         """
-        self.__timetable = []  # (<start_time>, <end_time>)
-        self.__busy_times_cached = None
+        self.__timetable = []  # (<busy_start_time>, <busy_end_time>)
 
     def reset(self):
         """
         Reset internal parameters.
         """
         del self.__timetable[:]
-        self.__busy_times_cached = None
-
-    @property
-    def busy_times(self):
-        """
-        List of busy time periods.
-
-        @return: List of busy time periods.
-        @rtype: list
-        """
-        if self.__busy_times_cached is None:
-            self.__busy_times_cached = []
-
-            if self.__timetable:
-                iterator = iter(self.__timetable[1:])
-                busy_period = list(self.__timetable[0])
-                while True:
-
-                    try:
-                        record = iterator.next()
-                    except StopIteration:
-                        record = None
-
-                    if record and busy_period[1] == record[0]:
-                        busy_period[1] = record[1]
-                    else:
-                        self.__busy_times_cached.append(tuple(busy_period))
-                        if record:
-                            del busy_period[:]
-                            busy_period.extend(record)
-                        else:
-                            break
-
-        return self.__busy_times_cached
 
     def get_idle_times(self, current_time):
         """
@@ -76,7 +41,7 @@ class NodeSchedule(object):
         output = []
 
         idle_start_timestamp = current_time
-        for record in self.busy_times:
+        for record in self.__timetable:
 
             if idle_start_timestamp < record[0]:
                 output.append(tuple([idle_start_timestamp, record[0]]))
@@ -84,7 +49,7 @@ class NodeSchedule(object):
                 continue
             idle_start_timestamp = record[1]
 
-        output.append(tuple([idle_start_timestamp]))
+        output.append((idle_start_timestamp,))
         return output
 
     def get_start_timestamps(self, wall_time, current_time):
@@ -120,21 +85,35 @@ class NodeSchedule(object):
         @param end_timestamp: Scheduled end time of the job processing.
         @type end_timestamp: float
         """
-        position_id, previous_end_timestamp = 0, 0.
-        for record in self.__timetable:
+        idx, ex_record = 0, (None, None)
+        while True:
 
-            if (previous_end_timestamp <= start_timestamp
-                    and end_timestamp <= record[0]):
-                break
+            try:
+                record = self.__timetable[idx]
+            except IndexError:
+                record = None
 
-            elif previous_end_timestamp > start_timestamp:
+            if ex_record[1] < start_timestamp:
+                if record is None or end_timestamp < record[0]:
+                    self.__timetable.insert(idx,
+                                            (start_timestamp, end_timestamp))
+                    break
+                elif record and end_timestamp == record[0]:
+                    self.__timetable[idx] = start_timestamp, record[1]
+                    break
+            elif ex_record[1] == start_timestamp:
+                if record is None or end_timestamp < record[0]:
+                    self.__timetable[idx-1] = ex_record[0], end_timestamp
+                    break
+                elif record and end_timestamp == record[0]:
+                    self.__timetable[idx-1] = (ex_record[0],
+                                               self.__timetable.pop(idx)[1])
+                    break
+            elif ex_record[1] > start_timestamp:
                 raise Exception('New record cannot fit to the idle period.')
 
-            position_id += 1
-            previous_end_timestamp = record[1]
-
-        self.__timetable.insert(position_id, (start_timestamp, end_timestamp))
-        self.__busy_times_cached = None
+            idx += 1
+            ex_record = record
 
 
 class ScheduleManager(object):
