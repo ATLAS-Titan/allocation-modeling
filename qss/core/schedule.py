@@ -22,12 +22,14 @@ class NodeSchedule(object):
         Initialization.
         """
         self.__timetable = []  # (<busy_start_time>, <busy_end_time>)
+        self.__idle_times_cached = None
 
     def reset(self):
         """
         Reset internal parameters.
         """
         del self.__timetable[:]
+        self.__idle_times_cached = None
 
     def get_idle_times(self, current_time):
         """
@@ -40,16 +42,23 @@ class NodeSchedule(object):
         """
         output = []
 
-        idle_start_timestamp = current_time
-        for record in self.__timetable:
+        if (self.__idle_times_cached
+                and self.__idle_times_cached[0] == current_time):
+            output = self.__idle_times_cached[1]
 
-            if idle_start_timestamp < record[0]:
-                output.append(tuple([idle_start_timestamp, record[0]]))
-            elif record[1] < idle_start_timestamp:
-                continue
-            idle_start_timestamp = record[1]
+        else:
+            idle_start_timestamp = current_time
+            for record in self.__timetable:
 
-        output.append((idle_start_timestamp,))
+                if idle_start_timestamp < record[0]:
+                    output.append(tuple([idle_start_timestamp, record[0]]))
+                elif record[1] < idle_start_timestamp:
+                    continue
+                idle_start_timestamp = record[1]
+
+            output.append((idle_start_timestamp,))
+            self.__idle_times_cached = (current_time, output)
+
         return output
 
     def get_start_timestamps(self, wall_time, current_time):
@@ -95,25 +104,27 @@ class NodeSchedule(object):
 
             if ex_record[1] < start_timestamp:
                 if record is None or end_timestamp < record[0]:
-                    self.__timetable.insert(idx,
-                                            (start_timestamp, end_timestamp))
+                    self.__timetable.insert(
+                        idx, (start_timestamp, end_timestamp))
                     break
                 elif record and end_timestamp == record[0]:
                     self.__timetable[idx] = start_timestamp, record[1]
                     break
             elif ex_record[1] == start_timestamp:
                 if record is None or end_timestamp < record[0]:
-                    self.__timetable[idx-1] = ex_record[0], end_timestamp
+                    self.__timetable[idx - 1] = ex_record[0], end_timestamp
                     break
                 elif record and end_timestamp == record[0]:
-                    self.__timetable[idx-1] = (ex_record[0],
-                                               self.__timetable.pop(idx)[1])
+                    self.__timetable[idx - 1] = (
+                        ex_record[0], self.__timetable.pop(idx)[1])
                     break
             elif ex_record[1] > start_timestamp:
                 raise Exception('New record cannot fit to the idle period.')
 
             idx += 1
             ex_record = record
+
+        self.__idle_times_cached = None
 
 
 class ScheduleManager(object):
@@ -175,19 +186,10 @@ class ScheduleManager(object):
                 break
 
             if cumulative_start_timestamps[sched_id]:
-                sched_next_timestamp, sched_next_value = \
+                next_timestamp, next_value = \
                     cumulative_start_timestamps[sched_id].pop(0)
-
-                position_id = 0
-                for record in next_timestamps:
-                    if (sched_next_timestamp < record[0] or
-                            (sched_next_timestamp == record[0] and
-                             sched_id < record[1])):
-                        break
-                    position_id += 1
-                next_timestamps.insert(position_id, (sched_next_timestamp,
-                                                     sched_id,
-                                                     sched_next_value))
+                next_timestamps.append((next_timestamp, sched_id, next_value))
+                next_timestamps.sort()
 
         return start_timestamp, schedule_ids
 
