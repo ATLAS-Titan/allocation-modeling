@@ -316,8 +316,7 @@ class ScheduleManager(object):
 
         if current_time == self.next_start_timestamp:
             self.__current_time = current_time
-            while (self.next_start_timestamp
-                   and self.__current_time == self.next_start_timestamp):
+            while self.__current_time == self.next_start_timestamp:
                 output.append(self.__scheduled_start_data.pop(0)[1:3])
 
         return output

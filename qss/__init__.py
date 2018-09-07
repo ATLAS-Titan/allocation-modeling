@@ -56,6 +56,8 @@ class QSS(object):
 
         self.__job_generators = []
         self.__input_jobs = []
+        self.__arrival_gid = None
+        self.__arrival_timestamp = None
 
         self.__queue = QueueManager(policy=QUEUE_POLICY,
                                     limit=queue_limit,
@@ -113,44 +115,26 @@ class QSS(object):
         except StopIteration:
             self.__input_jobs[gid] = None
 
-    def __next_arrival_params(self):
-        """
-        Get parameters of the next arriving job (gid, arrival_timestamp).
-
-        @return: Generator id with corresponding minimum (arrival) timestamp.
-        @rtype: tuple
-        """
-        sorted_params = sorted([(i, j.arrival_timestamp)
-                                for i, j in enumerate(self.__input_jobs) if j],
-                               key=lambda x: x[1])
-
-        output = (None, 0.) if not sorted_params else sorted_params[0]
-        return output
-
-    def __next_arrival_timestamp(self):
-        """
-        Get the closest (to the current time) timestamp.
-
-        @return: Minimum (arrival) timestamp.
-        @rtype: float
-        """
-        return self.__next_arrival_params()[1]
+        self.__arrival_gid, self.__arrival_timestamp = None, None
+        for idx, job in enumerate(self.__input_jobs):
+            if (job and (not self.__arrival_timestamp
+                         or job.arrival_timestamp < self.__arrival_timestamp)):
+                self.__arrival_gid, self.__arrival_timestamp = \
+                    idx, job.arrival_timestamp
 
     def __set_next_timestamp(self):
         """
         Define the next timestamp based on the closest action that is scheduled.
         """
-        next_arrival_timestamp = self.__next_arrival_timestamp()
         next_release_timestamp = self.__node_manager.next_release_timestamp
 
-        if not next_arrival_timestamp and not next_release_timestamp:
+        if not self.__arrival_timestamp and not next_release_timestamp:
             self.__current_state = ServiceState.Stop
 
         else:
-
             if (not next_release_timestamp or
-                    next_release_timestamp > next_arrival_timestamp > 0.):
-                self.__current_time = next_arrival_timestamp
+                    next_release_timestamp > self.__arrival_timestamp > 0.):
+                self.__current_time = self.__arrival_timestamp
                 self.__current_state = ServiceState.Arrival
             elif next_release_timestamp:
                 self.__current_time = next_release_timestamp
@@ -191,19 +175,19 @@ class QSS(object):
         @param verbose: Flag to get (show) logs.
         @type verbose: bool
         """
-        gid = self.__next_arrival_params()[0]
-        job = self.__input_jobs[gid]
+        while self.__arrival_timestamp == self.__current_time:
 
-        self.__queue.add(job=job, current_time=self.__current_time)
-        self.__set_next_arrival_job(gid=gid)
+            job = self.__input_jobs[self.__arrival_gid]
+            self.__queue.add(job=job, current_time=self.__current_time)
+            self.__set_next_arrival_job(gid=self.__arrival_gid)
 
-        if self.__scheduler is not None:
-            self.__scheduler.add(job=job, current_time=self.__current_time)
+            if self.__scheduler is not None and not self.__schedule_recreation:
+                self.__scheduler.add(job=job, current_time=self.__current_time)
 
-            job_id = id(job)
-            if (id(self.__queue.show_last()) != job_id
-                    and job_id not in self.__scheduler.next_scheduled_job_ids):
-                self.__schedule_recreation = True
+                job_id = id(job)
+                if (id(self.__queue.show_last()) != job_id
+                        and not self.__scheduler.is_backfill_job(job_id)):
+                    self.__schedule_recreation = True
 
         self.__trace_update(verbose=verbose,
                             action_code=ActionCode.Arrival)
@@ -237,7 +221,6 @@ class QSS(object):
                 current_time=self.__current_time)
 
             for job_id, node_ids in scheduled_elements:
-
                 self.__node_manager.assign_processing(
                     job=self.__queue.pull(
                         eid=0,
@@ -337,6 +320,8 @@ class QSS(object):
         self.__current_time = 0.
 
         del self.__input_jobs[:]
+        self.__arrival_gid = None
+        self.__arrival_timestamp = None
 
         self.__queue.reset()
         self.__node_manager.reset()
