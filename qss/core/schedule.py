@@ -221,6 +221,26 @@ class ScheduleManager(object):
 
         return output
 
+    def is_backfill_job(self, job_id):
+        """
+        Check whether the job is scheduled next (backfill job).
+
+        @param job_id: Job id.
+        @type job_id: int
+        @return: Flag that job will be processed next.
+        @rtype: bool
+        """
+        output = False
+
+        for record in self.__scheduled_start_data:
+            if self.__current_time != record[0]:
+                break
+            elif job_id == record[1]:
+                output = True
+                break
+
+        return output
+
     def add(self, job, current_time=None):
         """
         Add one job to the schedule.
