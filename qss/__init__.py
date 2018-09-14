@@ -14,6 +14,9 @@
 # - Alexey Poyda, <poyda@wdcb.ru>, 2017
 #
 
+import time
+from datetime import timedelta
+
 from .stream import stream_generator, stream_generator_by_file
 
 from .core import QueueManager, NodeManager, ScheduleManager
@@ -205,6 +208,8 @@ class QSS(object):
 
             if self.__schedule_recreation:
 
+                start_time = time.time()
+
                 self.__scheduler.set_initial_busy_times(
                     node_release_timestamps=
                     self.__node_manager.get_scheduled_release_timestamps(),
@@ -215,7 +220,8 @@ class QSS(object):
                 self.__schedule_recreation = False
 
                 if verbose:
-                    print 'Schedule is re-created.'
+                    print 'Schedule is re-created ({0}).'.\
+                        format(timedelta(seconds=time.time() - start_time))
 
             scheduled_elements = self.__scheduler.get_scheduled_elements(
                 current_time=self.__current_time)
