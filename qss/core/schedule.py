@@ -22,41 +22,12 @@ class NodeSchedule(object):
         Initialization.
         """
         self.__timetable = []  # (<busy_start_time>, <busy_end_time>)
-        self.__idle_times_cached = [None, []]
 
     def reset(self):
         """
         Reset internal parameters.
         """
         del self.__timetable[:]
-        self.__idle_times_cached[0] = None
-
-    def get_idle_times(self, current_time):
-        """
-        Get list of idle time periods.
-
-        @param current_time: Current time (timestamp from 0 to now).
-        @type current_time: float
-        @return: List of idle time periods.
-        @rtype: list
-        """
-        if self.__idle_times_cached[0] != current_time:
-
-            self.__idle_times_cached[0] = idle_start_timestamp = current_time
-            del self.__idle_times_cached[1][:]
-
-            for record in self.__timetable:
-
-                if idle_start_timestamp < record[0]:
-                    self.__idle_times_cached[1].append(
-                        (idle_start_timestamp, record[0]))
-                elif record[1] < idle_start_timestamp:
-                    continue
-                idle_start_timestamp = record[1]
-
-            self.__idle_times_cached[1].append((idle_start_timestamp,))
-
-        return self.__idle_times_cached[1]
 
     def get_start_timestamps(self, wall_time, current_time):
         """
@@ -66,21 +37,23 @@ class NodeSchedule(object):
         @type wall_time: float
         @param current_time: Current time (timestamp from 0 to now).
         @type current_time: float
-        @return: List of tuples with timestamp and 1/-1 value (inc/dec).
-        @rtype: list
+        @return: Tuples with timestamp and 1/-1 value (inc/dec).
+        @rtype: <generator>
         """
-        output = []
+        idle_start_timestamp = current_time
+        for record in self.__timetable:
 
-        for record in self.get_idle_times(current_time=current_time):
+            if (idle_start_timestamp < record[0]
+                    and record[0] - idle_start_timestamp >= wall_time):
+                yield (idle_start_timestamp, 1)
+                yield (record[0] - wall_time, -1)
 
-            if len(record) == 2 and (record[1] - record[0]) < wall_time:
+            elif record[1] < idle_start_timestamp:
                 continue
 
-            output.append((record[0], 1))
-            for timestamp in record[1:2]:
-                output.append((timestamp - wall_time, -1))
+            idle_start_timestamp = record[1]
 
-        return output
+        yield (idle_start_timestamp, 1)
 
     def insert(self, start_timestamp, end_timestamp):
         """
@@ -120,8 +93,6 @@ class NodeSchedule(object):
 
             idx += 1
             ex_record = record
-
-        self.__idle_times_cached[0] = None
 
 
 class ScheduleManager(object):
@@ -164,7 +135,7 @@ class ScheduleManager(object):
 
         next_timestamps = []
         for sched_id, timestamps in enumerate(cumulative_start_timestamps):
-            timestamp, value = timestamps.pop(0)
+            timestamp, value = timestamps.next()
             next_timestamps.append((timestamp, sched_id, value))
         next_timestamps.sort()
 
@@ -182,9 +153,12 @@ class ScheduleManager(object):
                 start_timestamp = timestamp
                 break
 
-            if cumulative_start_timestamps[sched_id]:
+            try:
                 next_timestamp, next_value = \
-                    cumulative_start_timestamps[sched_id].pop(0)
+                    cumulative_start_timestamps[sched_id].next()
+            except StopIteration:
+                pass
+            else:
                 next_timestamps.append((next_timestamp, sched_id, next_value))
                 next_timestamps.sort()
 
