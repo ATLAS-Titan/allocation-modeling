@@ -22,14 +22,14 @@ class NodeSchedule(object):
         Initialization.
         """
         self.__timetable = []  # (<busy_start_time>, <busy_end_time>)
-        self.__idle_times_cached = None
+        self.__idle_times_cached = [None, []]
 
     def reset(self):
         """
         Reset internal parameters.
         """
         del self.__timetable[:]
-        self.__idle_times_cached = None
+        self.__idle_times_cached[0] = None
 
     def get_idle_times(self, current_time):
         """
@@ -40,26 +40,23 @@ class NodeSchedule(object):
         @return: List of idle time periods.
         @rtype: list
         """
-        output = []
+        if self.__idle_times_cached[0] != current_time:
 
-        if (self.__idle_times_cached
-                and self.__idle_times_cached[0] == current_time):
-            output = self.__idle_times_cached[1]
+            self.__idle_times_cached[0] = idle_start_timestamp = current_time
+            del self.__idle_times_cached[1][:]
 
-        else:
-            idle_start_timestamp = current_time
             for record in self.__timetable:
 
                 if idle_start_timestamp < record[0]:
-                    output.append(tuple([idle_start_timestamp, record[0]]))
+                    self.__idle_times_cached[1].append(
+                        (idle_start_timestamp, record[0]))
                 elif record[1] < idle_start_timestamp:
                     continue
                 idle_start_timestamp = record[1]
 
-            output.append((idle_start_timestamp,))
-            self.__idle_times_cached = (current_time, output)
+            self.__idle_times_cached[1].append((idle_start_timestamp,))
 
-        return output
+        return self.__idle_times_cached[1]
 
     def get_start_timestamps(self, wall_time, current_time):
         """
@@ -124,7 +121,7 @@ class NodeSchedule(object):
             idx += 1
             ex_record = record
 
-        self.__idle_times_cached = None
+        self.__idle_times_cached[0] = None
 
 
 class ScheduleManager(object):
@@ -160,10 +157,10 @@ class ScheduleManager(object):
                             'the total number.')
 
         cumulative_start_timestamps = []
-        for schedule in self.__schedules:
-            cumulative_start_timestamps.append(schedule.get_start_timestamps(
-                wall_time=wall_time,
-                current_time=self.__current_time))
+        for sched_id, schedule in enumerate(self.__schedules):
+            cumulative_start_timestamps.insert(
+                sched_id, schedule.get_start_timestamps(
+                    wall_time=wall_time, current_time=self.__current_time))
 
         next_timestamps = []
         for sched_id, timestamps in enumerate(cumulative_start_timestamps):
