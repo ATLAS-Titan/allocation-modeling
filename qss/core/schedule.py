@@ -14,6 +14,11 @@
 # - Alexey Poyda, <poyda@wdcb.ru>, 2018
 #
 
+from multiprocessing.dummy import Pool as ThreadPool
+
+THREADS_NUMBER = 100
+THRESHOLD_NUMBER = 1000
+
 
 class NodeSchedule(object):
 
@@ -175,25 +180,6 @@ class ScheduleManager(object):
         if self.__scheduled_start_data:
             return self.__scheduled_start_data[0][0]
 
-    @property
-    def next_scheduled_job_ids(self):
-        """
-        Show job ids that are scheduled to be processed next.
-
-        @return: List of job ids.
-        @rtype: list
-        """
-        output = []
-
-        next_start_timestamp = self.next_start_timestamp
-        if next_start_timestamp is not None:
-            for record in self.__scheduled_start_data:
-                if next_start_timestamp != record[0]:
-                    break
-                output.append(record[1])
-
-        return output
-
     def is_backfill_job(self, job_id):
         """
         Check whether the job is scheduled next (backfill job).
@@ -231,11 +217,19 @@ class ScheduleManager(object):
 
         start_timestamp, schedule_ids = self.__get_schedule_parameters(job=job)
         end_timestamp = start_timestamp + job.wall_time
-        job_id = id(job)
 
-        for sched_id in schedule_ids:
-            self.__schedules[sched_id].insert(start_timestamp=start_timestamp,
-                                              end_timestamp=end_timestamp)
+        def insert_record(schedule_id):
+            return self.__schedules[schedule_id].insert(
+                start_timestamp=start_timestamp,
+                end_timestamp=end_timestamp)
+
+        if len(schedule_ids) < THRESHOLD_NUMBER:
+            map(insert_record, schedule_ids)
+        else:
+            pool = ThreadPool(THREADS_NUMBER)
+            pool.map(insert_record, schedule_ids)
+            pool.close()
+            pool.join()
 
         position_id = 0
         for record in self.__scheduled_start_data:
@@ -243,7 +237,7 @@ class ScheduleManager(object):
                 break
             position_id += 1
         self.__scheduled_start_data.insert(position_id, (start_timestamp,
-                                                         job_id,
+                                                         id(job),
                                                          schedule_ids))
 
     def set_initial_busy_times(self, node_release_timestamps, current_time):
@@ -275,6 +269,22 @@ class ScheduleManager(object):
         """
         for job in queue_iterator:
             self.add(job=job)
+
+    def has_scheduled_elements(self, current_time):
+        """
+        Check that there are elements that are scheduled to be processed.
+
+        @param current_time: Current time (timestamp from 0 to now).
+        @type current_time: float/None
+        @return: Flag that there is at least one job that will be processed.
+        @rtype: bool
+        """
+        output = False
+
+        if current_time == self.next_start_timestamp:
+            output = True
+
+        return output
 
     def get_scheduled_elements(self, current_time):
         """

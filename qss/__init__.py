@@ -71,6 +71,7 @@ class QSS(object):
         self.__scheduler = ScheduleManager(num_nodes=num_nodes) \
             if use_scheduler else None
         self.__schedule_recreation = False
+        self.__new_priority_arrival = False
 
         self.__output = []
         self.__trace = []
@@ -184,13 +185,16 @@ class QSS(object):
             self.__queue.add(job=job, current_time=self.__current_time)
             self.__set_next_arrival_job(gid=self.__arrival_gid)
 
-            if self.__scheduler is not None and not self.__schedule_recreation:
+            if self.__scheduler is not None:
                 self.__scheduler.add(job=job, current_time=self.__current_time)
 
                 job_id = id(job)
                 if (id(self.__queue.show_last()) != job_id
                         and not self.__scheduler.is_backfill_job(job_id)):
-                    self.__schedule_recreation = True
+                    self.__new_priority_arrival = True
+
+                    if verbose:
+                        print 'New job with high priority is arrived.'
 
         self.__trace_update(verbose=verbose,
                             action_code=ActionCode.Arrival)
@@ -205,6 +209,12 @@ class QSS(object):
         had_submission = False
 
         if self.__scheduler is not None:
+
+            if (self.__new_priority_arrival
+                    and self.__scheduler.has_scheduled_elements(
+                        current_time=self.__current_time)):
+                self.__schedule_recreation = True
+                self.__new_priority_arrival = False
 
             if self.__schedule_recreation:
 
@@ -268,11 +278,16 @@ class QSS(object):
         completed_jobs = self.__node_manager.stop_processing(
             current_time=self.__current_time)
 
-        if self.__scheduler is not None:
+        if self.__scheduler is not None and completed_jobs:
+
             for job in completed_jobs:
                 if job.scheduled_release_timestamp != job.release_timestamp:
                     self.__schedule_recreation = True
                     break
+
+            if self.__new_priority_arrival:
+                self.__schedule_recreation = True
+                self.__new_priority_arrival = False
 
         self.__output.extend(completed_jobs)
 
