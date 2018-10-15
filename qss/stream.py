@@ -174,6 +174,9 @@ def stream_generator_by_file(file_name, source_label=None, time_limit=None):
                             'num_nodes': int(float(job_params[3]))})
                 except ValueError:
                     continue
+                else:
+                    if object_options['execution_time'] == 0.0:
+                        continue
 
                 yield Job(arrival_timestamp=arrival_timestamp,
                           source_label=source_label,
