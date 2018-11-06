@@ -172,6 +172,27 @@ class QSS(object):
 
         return output
 
+    def __scheduling(self, job, verbose=False):
+        """
+        Add provided job to the schedule.
+
+        @param job: Job object.
+        @type job: qss.core.job.Job
+        @param verbose: Flag to get (show) logs.
+        @type verbose: bool
+        """
+        if self.__scheduler is not None:
+            self.__scheduler.add(job=job, current_time=self.__current_time)
+
+            job_id = id(job)
+            if (id(self.__queue.show_last()) != job_id
+                    and not self.__scheduler.is_backfill_job(job_id)):
+
+                self.__new_priority_arrival = True
+
+                if verbose:
+                    print 'New job with high priority is arrived.'
+
     def __arrival(self, verbose=False):
         """
         Get new (generated) job and put it to the queue.
@@ -182,19 +203,11 @@ class QSS(object):
         while self.__arrival_timestamp == self.__current_time:
 
             job = self.__input_jobs[self.__arrival_gid]
-            self.__queue.add(job=job, current_time=self.__current_time)
+            status = self.__queue.add(job=job, current_time=self.__current_time)
             self.__set_next_arrival_job(gid=self.__arrival_gid)
 
-            if self.__scheduler is not None:
-                self.__scheduler.add(job=job, current_time=self.__current_time)
-
-                job_id = id(job)
-                if (id(self.__queue.show_last()) != job_id
-                        and not self.__scheduler.is_backfill_job(job_id)):
-                    self.__new_priority_arrival = True
-
-                    if verbose:
-                        print 'New job with high priority is arrived.'
+            if not status:
+                self.__scheduling(job=job, verbose=verbose)
 
         self.__trace_update(verbose=verbose,
                             action_code=ActionCode.Arrival)
@@ -210,43 +223,50 @@ class QSS(object):
 
         if self.__scheduler is not None:
 
-            if (self.__new_priority_arrival
-                    and self.__scheduler.has_scheduled_elements(
-                        current_time=self.__current_time)):
-                self.__schedule_recreation = True
-                self.__new_priority_arrival = False
+            while self.__scheduler.has_scheduled_elements(
+                    current_time=self.__current_time):
 
-            if self.__schedule_recreation:
+                if self.__new_priority_arrival:
+                    self.__schedule_recreation = True
+                    self.__new_priority_arrival = False
 
-                start_time = time.time()
+                if self.__schedule_recreation:
 
-                self.__scheduler.set_initial_busy_times(
-                    node_release_timestamps=
-                    self.__node_manager.get_scheduled_release_timestamps(),
-                    current_time=self.__current_time)
-                self.__scheduler.create_schedule_by_queue(
-                    queue_iterator=self.__queue.iterator())
+                    start_time = time.time()
 
-                self.__schedule_recreation = False
+                    self.__scheduler.set_initial_busy_times(
+                        node_release_timestamps=
+                        self.__node_manager.get_scheduled_release_timestamps(),
+                        current_time=self.__current_time)
+                    self.__scheduler.create_schedule_by_queue(
+                        queue_iterator=self.__queue.iterator())
 
-                if verbose:
-                    print 'Schedule is re-created ({0}).'.\
-                        format(timedelta(seconds=time.time() - start_time))
+                    self.__schedule_recreation = False
 
-            scheduled_elements = self.__scheduler.get_scheduled_elements(
-                current_time=self.__current_time)
+                    if verbose:
+                        print 'Schedule is re-created ({0}).'.\
+                            format(timedelta(seconds=time.time() - start_time))
 
-            for job_id, node_ids in scheduled_elements:
-                self.__node_manager.assign_processing(
-                    job=self.__queue.pull(
-                        eid=0,
-                        job_id=job_id,
-                        current_time=self.__current_time),
-                    node_ids=node_ids,
+                scheduled_elements = self.__scheduler.get_scheduled_elements(
                     current_time=self.__current_time)
 
-            if scheduled_elements and not had_submission:
-                had_submission = True
+                for job_id, node_ids in scheduled_elements:
+                    self.__node_manager.assign_processing(
+                        job=self.__queue.pull(
+                            eid=0,
+                            job_id=job_id,
+                            current_time=self.__current_time),
+                        node_ids=node_ids,
+                        current_time=self.__current_time)
+
+                    queued_buffer_job = self.__queue.get_new_added_from_buffer(
+                        current_time=self.__current_time)
+                    if queued_buffer_job:
+                        self.__scheduling(job=queued_buffer_job,
+                                          verbose=verbose)
+
+                if scheduled_elements and not had_submission:
+                    had_submission = True
 
         else:
 
@@ -278,29 +298,32 @@ class QSS(object):
         completed_jobs = self.__node_manager.stop_processing(
             current_time=self.__current_time)
 
-        if self.__scheduler is not None and completed_jobs:
-
-            for job in completed_jobs:
-                if job.scheduled_release_timestamp != job.release_timestamp:
-                    self.__schedule_recreation = True
-                    break
+        if (self.__scheduler is not None and not self.__queue.is_empty
+                and completed_jobs):
 
             if self.__new_priority_arrival:
                 self.__schedule_recreation = True
                 self.__new_priority_arrival = False
+            else:
+                for job in completed_jobs:
+                    if job.scheduled_release_timestamp != job.release_timestamp:
+                        self.__schedule_recreation = True
+                        break
 
         self.__output.extend(completed_jobs)
 
         if self.__output_file and completed_jobs:
             with open(self.__output_file, 'a') as f:
                 for job in completed_jobs:
-                    f.write(','.join([
-                        str(job.arrival_timestamp),
-                        str(job.submission_timestamp),
-                        str(job.release_timestamp),
-                        str(job.num_nodes),
-                        job.source_label
-                    ]) + '\n')
+                    params = [str(job.arrival_timestamp),
+                              str(job.submission_timestamp),
+                              str(job.release_timestamp),
+                              str(job.num_nodes)]
+                    if job.source:
+                        params.append(job.source)
+                    if job.label:
+                        params.append(job.label)
+                    f.write(','.join(params) + '\n')
 
         self.__trace_update(verbose=verbose,
                             action_code=ActionCode.Completion)
@@ -321,9 +344,9 @@ class QSS(object):
 
             detailed_trace_string = '{0:15f} - {1} - {2} - {3} - {4}'.format(
                 self.__current_time,
-                self.__queue.get_num_jobs_with_labels(in_buffer=True),
-                self.__queue.get_num_jobs_with_labels(),
-                self.__node_manager.get_num_jobs_with_labels(),
+                self.__queue.get_num_jobs_with_source_names(in_buffer=True),
+                self.__queue.get_num_jobs_with_source_names(),
+                self.__node_manager.get_num_jobs_with_source_names(),
                 self.__trace[-1][3])
 
             if verbose:
@@ -388,12 +411,12 @@ class QSS(object):
 
         return output
 
-    def get_avg_delay(self, source_label=None):
+    def get_avg_delay(self, source=None):
         """
-        Get average job's delay (wait time + service time).
+        Get average job's delay (waiting time + execution time).
 
-        @param source_label: Source label (make calculations by stream).
-        @type source_label: str/None
+        @param source: Source name (make calculations by stream).
+        @type source: str/None
         @return: Average number.
         @rtype: float
         """
@@ -401,27 +424,27 @@ class QSS(object):
 
         if self.__output:
 
-            jobs = self.__output if not source_label else filter(
-                lambda x: x.source_label == source_label, self.__output)
+            jobs = self.__output if not source else filter(
+                lambda x: x.source == source, self.__output)
 
             output = reduce(lambda x, y: x + y.delay, jobs, 0.) / len(jobs)
 
         return output
 
-    def get_utilization_value(self, source_label=None):
+    def get_utilization_value(self, source=None):
         """
         Get the utilization value.
 
-        @param source_label: Source label (make calculations by stream).
-        @type source_label: str/None
+        @param source: Source name (make calculations by stream).
+        @type source: str/None
         @return: Utilization value.
         @rtype: float
         """
         output = 0.
 
         if self.__output:
-            jobs = self.__output if not source_label else filter(
-                lambda x: x.source_label == source_label, self.__output)
+            jobs = self.__output if not source else filter(
+                lambda x: x.source == source, self.__output)
 
             output = reduce(
                 lambda x, y: x + (y.num_nodes * y.execution_time), jobs, 0.)
@@ -447,9 +470,9 @@ class QSS(object):
             print 'Queue drop rate: {0}'.format(
                 float(self.__queue.num_dropped) /
                 (self.__queue.num_dropped + len(self.output_channel)))
-            drop_pairs = self.__queue.get_num_dropped_with_labels()
-            if len(drop_pairs) > 1:
-                print 'Dropped jobs in queue (by label): {0}'.format(drop_pairs)
+            d_pairs = self.__queue.get_num_dropped_with_source_names()
+            if len(d_pairs) > 1:
+                print 'Dropped jobs in queue (per source): {0}'.format(d_pairs)
 
     def run(self, streams, verbose=False, output_file=None):
         """

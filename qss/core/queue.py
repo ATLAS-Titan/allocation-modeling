@@ -47,8 +47,9 @@ class QueueManager(object):
         """
         self.__queue = []
         self.__latest_queued_timestamp = 0.
+        self.__queued_buffer_job = None
 
-        self.__num_labeled_jobs = defaultdict(int)
+        self.__num_jobs_per_source = defaultdict(int)
 
         policy = policy or {}
 
@@ -88,17 +89,17 @@ class QueueManager(object):
         """
         del self.__queue[:]
         self.__latest_queued_timestamp = 0.
+        self.__queued_buffer_job = None
 
-        for label in self.__num_labeled_jobs:
-            self.__num_labeled_jobs[label] = 0
+        self.__num_jobs_per_source.clear()
 
         if self.__buffer is not None:
-            for label in self.__buffer:
-                del self.__buffer[label][:]
+            for source in self.__buffer:
+                del self.__buffer[source][:]
 
         if self.__num_dropped is not None:
-            for label in self.__num_dropped:
-                self.__num_dropped[label] = 0
+            for source in self.__num_dropped:
+                self.__num_dropped[source] = 0
 
     @property
     def is_empty(self):
@@ -145,37 +146,37 @@ class QueueManager(object):
         """
         return self.length + self.length_buffer
 
-    def get_num_labeled_jobs(self, label, in_buffer=False):
+    def get_num_jobs_per_source(self, source, in_buffer=False):
         """
-        Get the number of jobs in the queue/buffer by label.
+        Get the number of jobs in the queue/buffer by the source name.
 
-        @param label: Source label of the job.
-        @type label: str
+        @param source: Source name of the job.
+        @type source: str
         @param in_buffer: Flag to count jobs in the buffer.
         @type in_buffer: bool
         @return: Number of jobs.
         @rtype: int
         """
         if not in_buffer:
-            output = self.__num_labeled_jobs[label]
+            output = self.__num_jobs_per_source[source]
         else:
             output = 0
-            if self.__buffer is not None and label in self.__buffer:
-                output = len(self.__buffer[label])
+            if self.__buffer is not None and source in self.__buffer:
+                output = len(self.__buffer[source])
 
         return output
 
-    def get_num_jobs_with_labels(self, in_buffer=False):
+    def get_num_jobs_with_source_names(self, in_buffer=False):
         """
-        Get the number of jobs with corresponding labels.
+        Get the number of jobs with corresponding source names.
 
         @param in_buffer: Flag to count jobs in the buffer.
         @type in_buffer: bool
-        @return: Pairs of labels and corresponding number of jobs.
+        @return: Pairs of source names and the corresponding number of jobs.
         @rtype: list((str, int))
         """
         if not in_buffer:
-            output = self.__num_labeled_jobs.items()
+            output = self.__num_jobs_per_source.items()
         else:
             output = []
             if self.__buffer is not None:
@@ -183,24 +184,27 @@ class QueueManager(object):
 
         return output
 
-    def __increase_num_labeled_jobs(self, label):
+    def __increase_num_jobs_per_source(self, source):
         """
-        Increase the number of labeled jobs (in the queue).
+        Increase the number of jobs (in the queue) from the specific source.
 
-        @param label: Source label of the job.
-        @type label: str
+        @param source: Source name of the job.
+        @type source: str
         """
-        self.__num_labeled_jobs[label] += 1
+        self.__num_jobs_per_source[source] += 1
 
-    def __decrease_num_labeled_jobs(self, label):
+    def __decrease_num_jobs_per_source(self, source):
         """
-        Decrease the number of labeled jobs (in the queue).
+        Decrease the number of jobs (in the queue) from the specific source.
 
-        @param label: Source label of the job.
-        @type label: str
+        @param source: Source name of the job.
+        @type source: str
         """
-        if label in self.__num_labeled_jobs:
-            self.__num_labeled_jobs[label] -= 1
+        if source in self.__num_jobs_per_source:
+            self.__num_jobs_per_source[source] -= 1
+
+            if not self.__num_jobs_per_source[source]:
+                del self.__num_jobs_per_source[source]
 
     @property
     def num_dropped(self):
@@ -212,22 +216,22 @@ class QueueManager(object):
         """
         return 0 if self.__num_dropped is None else self.__num_dropped['_total']
 
-    def get_labeled_num_dropped(self, label):
+    def get_num_dropped_per_source(self, source):
         """
-        Get the number of dropped jobs by label.
+        Get the number of dropped jobs per the source name.
 
-        @param label: Source label of the job.
-        @type label: str
+        @param source: Source name of the job.
+        @type source: str
         @return: Number of dropped jobs.
         @rtype: int
         """
-        return 0 if self.__num_dropped is None else self.__num_dropped[label]
+        return 0 if self.__num_dropped is None else self.__num_dropped[source]
 
-    def get_num_dropped_with_labels(self):
+    def get_num_dropped_with_source_names(self):
         """
-        Get the number of dropped jobs with corresponding labels.
+        Get the number of dropped jobs with corresponding source names.
 
-        @return: Pairs of labels and corresponding number of dropped jobs.
+        @return: Pairs of source names and corresponding number of dropped jobs.
         @rtype: list((str, int))
         """
         return [] if self.__num_dropped is None else self.__num_dropped.items()
@@ -243,13 +247,13 @@ class QueueManager(object):
         """
         if self.__discipline == QueueDiscipline.Priority:
             time_delta = current_time - self.__latest_queued_timestamp
-            for element in self.__queue:
+            for element in self.iterator():
                 element.increase_priority(value=time_delta)
-            self.__latest_queued_timestamp = current_time
 
         self.__job_init(job=job)
         self.__queue_append(queue=self.__queue, element=job)
-        self.__increase_num_labeled_jobs(label=job.source_label)
+        self.__increase_num_jobs_per_source(source=job.source)
+        self.__latest_queued_timestamp = current_time
 
     def __process_rejected_job(self, job):
         """
@@ -259,26 +263,31 @@ class QueueManager(object):
         @type job: qss.core.job.Job
         """
         if self.__buffer is not None:
-            self.__buffer[job.source_label].append(job)
+            self.__buffer[job.source].append(job)
 
         elif self.__num_dropped is not None:
-            self.__num_dropped[job.source_label] += 1
+            self.__num_dropped[job.source] += 1
             self.__num_dropped['_total'] += 1
 
-    def __post_pop_labeled_job(self, label, current_time):
+    def __post_pop_job_per_source(self, source, current_time):
         """
         Actions after the next job is taken (pulled) from the queue.
 
-        @param label: Source label of the job.
-        @type label: str
+        @param source: Source name of the job.
+        @type source: str
         @param current_time: Current time (timestamp from 0 to now).
         @type current_time: float
         """
-        self.__decrease_num_labeled_jobs(label=label)
-        # get the job (of the defined label) from the buffer
-        if self.get_num_labeled_jobs(label=label, in_buffer=True):
-            self.add(job=self.__buffer[label].pop(0),
-                     current_time=current_time)
+        self.__decrease_num_jobs_per_source(source=source)
+
+        # get the job (of the defined source name) from the buffer
+        if self.get_num_jobs_per_source(source=source, in_buffer=True):
+            job_from_buffer = self.__buffer[source].pop(0)
+            self.add(job=job_from_buffer, current_time=current_time)
+            self.__queued_buffer_job = job_from_buffer
+
+            if not self.__buffer[source]:
+                del self.__buffer[source]
 
     def add(self, job, current_time):
         """
@@ -288,7 +297,11 @@ class QueueManager(object):
         @type job: qss.core.job.Job
         @param current_time: Current time (timestamp from 0 to now).
         @type current_time: float
+        @return: Status code (0 - success, 1 - rejected).
+        @rtype: int
         """
+        output = 0
+
         with_limit, has_free_spots = False, True
 
         if '_total' in self.__limits:
@@ -296,9 +309,16 @@ class QueueManager(object):
                 has_free_spots = False
             with_limit = True
 
-        if has_free_spots and job.source_label in self.__limits:
-            if (self.__limits[job.source_label] -
-                    self.get_num_labeled_jobs(label=job.source_label)) < 1:
+        if job.source in self.__limits:
+            source_limit_key = job.source
+        elif '_per_source' in self.__limits:
+            source_limit_key = '_per_source'
+        else:
+            source_limit_key = None
+
+        if has_free_spots and source_limit_key:
+            if (self.__limits[source_limit_key] -
+                    self.get_num_jobs_per_source(source=job.source)) < 1:
                 has_free_spots = False
             with_limit = True
 
@@ -306,6 +326,9 @@ class QueueManager(object):
             self.__process_approved_job(job=job, current_time=current_time)
         elif with_limit:
             self.__process_rejected_job(job=job)
+            output = 1
+
+        return output
 
     def show_last(self):
         """
@@ -325,6 +348,23 @@ class QueueManager(object):
         """
         return self.__queue[0]
 
+    def get_new_added_from_buffer(self, current_time):
+        """
+        Show the new job that was added at this (current) time.
+
+        @param current_time: Current time (timestamp from 0 to now).
+        @type current_time: float
+        @return: Job object.
+        @rtype: qss.core.job.Job/None
+        """
+        output = None
+
+        if self.__latest_queued_timestamp == current_time:
+            output = self.__queued_buffer_job
+            self.__queued_buffer_job = None
+
+        return output
+
     def get_next(self, current_time):
         """
         Get (remove and return) job from the queue.
@@ -336,8 +376,8 @@ class QueueManager(object):
         """
         output = self.__queue.pop(0)
 
-        self.__post_pop_labeled_job(label=output.source_label,
-                                    current_time=current_time)
+        self.__post_pop_job_per_source(source=output.source,
+                                       current_time=current_time)
         return output
 
     def pull(self, eid, current_time, **kwargs):
@@ -370,13 +410,13 @@ class QueueManager(object):
         if output is None:
             raise Exception('Defined job is not found in the queue.')
 
-        self.__post_pop_labeled_job(label=output.source_label,
-                                    current_time=current_time)
+        self.__post_pop_job_per_source(source=output.source,
+                                       current_time=current_time)
         return output
 
     def iterator(self, limit=None):
         """
-        Get the iterator over the queue .
+        Get the iterator over the queue.
 
         @param limit: The number of elements to go through.
         @type limit: int/None

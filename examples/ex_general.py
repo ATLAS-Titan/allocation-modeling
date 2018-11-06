@@ -10,11 +10,11 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Author(s):
-# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
+# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017-2018
+# - Alexey Poyda, <poyda@wdcb.ru>, 2017
 #
 
 from qss import QSS, stream_generator, stream_generator_by_file
-
 from qss.constants import StreamName
 
 
@@ -23,29 +23,28 @@ SERVICE_RATE = 1./3
 NUM_NODES = 100  # M/M/NUM_NODES
 
 TIME_LIMIT = 1000.
-NUM_ATTEMPTS = 1
+NUM_ATTEMPTS = 2
 
 
 if __name__ == '__main__':
 
-    qs = QSS(num_nodes=NUM_NODES, output_file='qss_output.csv')
+    qs = QSS(num_nodes=NUM_NODES,
+             output_file='qss_output.txt')
 
     max_num_jobs, avg_num_jobs, avg_delay = 0, 0., 0.
 
     for _ in range(NUM_ATTEMPTS):
 
-        qs.run(
-            streams=[stream_generator_by_file(file_name='qss_ex_input.csv',
-                                              source_label=StreamName.External,
-                                              time_limit=TIME_LIMIT),
-                     stream_generator(arrival_rate=ARRIVAL_RATE,
-                                      execution_rate=SERVICE_RATE,
-                                      num_nodes=100,
-                                      source_label=StreamName.Main,
-                                      num_jobs=None,
-                                      time_limit=TIME_LIMIT)],
-            verbose=True
-        )
+        qs.run(streams=[stream_generator_by_file(file_name='qss_ex_input.txt',
+                                                 source=StreamName.External,
+                                                 time_limit=TIME_LIMIT),
+                        stream_generator(arrival_rate=ARRIVAL_RATE,
+                                         execution_rate=SERVICE_RATE,
+                                         num_nodes=100,
+                                         source=StreamName.Main,
+                                         num_jobs=None,
+                                         time_limit=TIME_LIMIT)],
+               verbose=True)
 
         avg_num_jobs += qs.get_avg_num_jobs()
         avg_delay += qs.get_avg_delay()

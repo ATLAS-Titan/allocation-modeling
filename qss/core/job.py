@@ -16,7 +16,7 @@
 
 class Job(object):
 
-    def __init__(self, execution_time, num_nodes, source_label=None, **kwargs):
+    def __init__(self, execution_time, num_nodes, source=None, **kwargs):
         """
         Initialization.
 
@@ -24,18 +24,20 @@ class Job(object):
         @type execution_time: float
         @param num_nodes: Number of required service nodes.
         @type num_nodes: int
-        @param source_label: Input stream name.
-        @type source_label: str/None
+        @param source: Input source/stream name.
+        @type source: str/None
 
         @keyword wall_time: Requested processing time.
         @keyword arrival_timestamp: Arrival timestamp.
         @keyword priority: Priority value.
+        @keyword label: Label (project) name.
         """
         self.wall_time = kwargs.get('wall_time', execution_time)
         self.num_nodes = num_nodes
 
         self.execution_time = execution_time
-        self.source_label = source_label
+        self.source = source
+        self.label = kwargs.get('label')
 
         self.arrival_timestamp = kwargs.get('arrival_timestamp')
         self.submission_timestamp = None

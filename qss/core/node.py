@@ -29,7 +29,7 @@ class NodeManager(object):
         """
         self.__nodes = [NodeState.Idle for _ in range(num_nodes)]
         self.__jobs_allocation = []  # (<job>, <node_ids>)
-        self.__num_labeled_jobs = defaultdict(int)
+        self.__num_jobs_per_source = defaultdict(int)
 
     @property
     def num_idle_nodes(self):
@@ -127,7 +127,7 @@ class NodeManager(object):
         job.submission_timestamp = current_time
         self.__jobs_allocation.append((job, node_ids))
         self.__jobs_allocation.sort(key=lambda x: x[0].release_timestamp)
-        self.__increase_num_labeled_jobs(label=job.source_label)
+        self.__increase_num_jobs_per_source(source=job.source)
 
     def stop_processing(self, current_time):
         """
@@ -144,7 +144,7 @@ class NodeManager(object):
 
             job, node_ids = self.__jobs_allocation.pop(0)
             output.append(job)
-            self.__decrease_num_labeled_jobs(label=job.source_label)
+            self.__decrease_num_jobs_per_source(source=job.source)
 
             for node_id in node_ids:
                 self.__nodes[node_id] = NodeState.Idle
@@ -183,7 +183,7 @@ class NodeManager(object):
         job.submission_timestamp = current_time
         self.__jobs_allocation.append((job, node_ids))
         self.__jobs_allocation.sort(key=lambda x: x[0].release_timestamp)
-        self.__increase_num_labeled_jobs(label=job.source_label)
+        self.__increase_num_jobs_per_source(source=job.source)
 
     def reset(self):
         """
@@ -195,32 +195,35 @@ class NodeManager(object):
                     self.__nodes[node_id] = NodeState.Idle
 
         del self.__jobs_allocation[:]
-        self.__num_labeled_jobs.clear()
+        self.__num_jobs_per_source.clear()
 
-    def __increase_num_labeled_jobs(self, label):
+    def __increase_num_jobs_per_source(self, source):
         """
-        Increase the number of jobs of the specific label.
+        Increase the number of jobs from the specific source.
 
-        @param label: Source label of the job.
-        @type label: str
+        @param source: Source name of the job.
+        @type source: str
         """
-        self.__num_labeled_jobs[label] += 1
+        self.__num_jobs_per_source[source] += 1
 
-    def __decrease_num_labeled_jobs(self, label):
+    def __decrease_num_jobs_per_source(self, source):
         """
-        Decrease the number of jobs of the specific label.
+        Decrease the number of jobs from the specific source.
 
-        @param label: Source label of the job.
-        @type label: str
+        @param source: Source name of the job.
+        @type source: str
         """
-        if label in self.__num_labeled_jobs:
-            self.__num_labeled_jobs[label] -= 1
+        if source in self.__num_jobs_per_source:
+            self.__num_jobs_per_source[source] -= 1
 
-    def get_num_jobs_with_labels(self):
+            if not self.__num_jobs_per_source[source]:
+                del self.__num_jobs_per_source[source]
+
+    def get_num_jobs_with_source_names(self):
         """
-        Get the number of jobs with corresponding labels.
+        Get the number of jobs with corresponding source names.
 
-        @return: Pairs of labels and the corresponding number of jobs.
+        @return: Pairs of source names and the corresponding number of jobs.
         @rtype: tuple(str, int)
         """
-        return self.__num_labeled_jobs.items()
+        return self.__num_jobs_per_source.items()

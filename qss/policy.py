@@ -55,7 +55,8 @@ def priority_queue_job_init(job):
 
 QUEUE_POLICY = {
     'limit': {
-        StreamName.Main: 4
+        #StreamName.Main: 4,
+        '_per_source': 4
     },
     'discipline': QueueDiscipline.Priority,
     'job_init': priority_queue_job_init
