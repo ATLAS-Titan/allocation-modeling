@@ -64,7 +64,7 @@ stream_2 = stream_generator_by_file(file_name='qss_input.txt',
                                     time_limit=1000.)
 ```
 
-It is important to note the following arguments in the predefined stream functions - `num_nodes` and `time_limit` - that represent restrictions imposed either on the number of generated jobs or on the processing time. Either of them **should** be set.
+It is important to note the following arguments in the predefined stream functions - `num_jobs` and `time_limit` - that represent restrictions imposed either on the number of generated jobs or on the processing time. Either of them **should** be set.
 
 #### Run the processing
 
