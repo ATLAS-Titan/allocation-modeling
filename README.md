@@ -2,6 +2,10 @@
 
 This project includes design and development of a quantitative model and a simulator (see repository's [wiki](https://github.com/ATLAS-Titan/allocation-modeling/wiki) for details). The description and the code of the designed simulator is presented in the current repository.
 
+* [Introduction](#introduction)
+* [Simulator's description](#simulator)
+* [Simulator's usage](usage)
+
 ## Introduction
 
 The focus of the research work is on the study of the load on a supercomputer (specifically, on [Titan](https://www.olcf.ornl.gov/olcf-resources/compute-systems/titan/) supercomputer ) and its modeling. The load on a resource is defined as a number of busy service nodes at a certain time; it is determined by the number and parameters of running computing jobs:
