@@ -4,7 +4,7 @@ This project includes design and development of a quantitative model and a simul
 
 * [Introduction](#introduction)
 * [Simulator's description](#simulator)
-* [Simulator's usage](usage)
+* [Simulator's usage](#usage)
 
 ## Introduction
 
