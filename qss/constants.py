@@ -9,8 +9,15 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
+# Author(s):
+# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
+#
 
-from .job import Job
-from .node import NodeManager
-from .queue import QueueManager, QueueDiscipline
-from .schedule import ScheduleManager
+from .utils import EnumTypes
+
+
+StreamName = EnumTypes(
+    ('Default', 'default'),
+    ('External', 'external'),
+    ('Main', 'main')
+)

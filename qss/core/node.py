@@ -10,193 +10,220 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Author(s):
-# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017
+# - Mikhail Titov, <mikhail.titov@cern.ch>, 2017-2018
 #
 
-import math
-import random
+from collections import defaultdict, Counter
+
+from .constants import NodeState
 
 
-def get_random(rate):
-    return (-1./rate) * math.log(1. - random.random())
+class NodeManager(object):
 
-
-class ServiceNode(object):
-
-    """Class ServiceNode represents processing node."""
-
-    def __init__(self, service_rate, output_channel):
+    def __init__(self, num_nodes):
         """
         Initialization.
 
-        @param service_rate: Processing rate of the service node.
-        @type service_rate: float
-        @param output_channel: List of processed jobs.
-        @type output_channel: list
-        """
-        self._service_rate = service_rate
-        self._output_channel = output_channel
-        self._job = None
-
-        self.__locked = False
-
-    @property
-    def _service_time(self):
-        """
-        Generate random processing time based on processing rate.
-
-        @return: Processing time.
-        @rtype: float
-        """
-        return get_random(rate=self._service_rate)
-
-    @property
-    def release_timestamp(self):
-        """
-        Timestamp when the job will be released.
-
-        @return: Job released timestamp.
-        @rtype: float
-        """
-        if self._job is not None:
-            return self._job.release_timestamp
-
-    def lock(self, current_time, job):
-        """
-        Lock the service node for job processing.
-
-        @param current_time: Current time (timestamp from 0 to now).
-        @type current_time: float
-        @param job: Job object.
-        @type job: qss.core.job.JobSpecs
-        """
-        self.__locked = True
-
-        self._job = job
-        self._job.submission_timestamp = current_time
-        self._job.release_timestamp = current_time + self._service_time
-
-    def unlock(self):
-        """
-        Unlock the service node after job processing is done.
-        """
-        self.__locked = False
-
-        self._output_channel.append(self._job)
-        self._job = None
-
-    @property
-    def is_locked(self):
-        """
-        Flag showed whether service node is locked or not.
-
-        @return: Flag of the service node state.
-        @rtype: bool
-        """
-        return self.__locked
-
-
-class ServiceManager(object):
-
-    """Class ServiceManager is responsible to handle a group of nodes."""
-
-    def __init__(self, service_rate, num_nodes, output_channel):
-        """
-        Initialization.
-
-        @param service_rate: Processing rate of the service node.
-        @type service_rate: float
         @param num_nodes: Number of service nodes.
         @type num_nodes: int
-        @param output_channel: List of processed job.
-        @type output_channel: list
         """
-        self.__nodes = [ServiceNode(service_rate=service_rate,
-                                    output_channel=output_channel)
-                        for _ in range(num_nodes)]
+        self.__nodes = [NodeState.Idle for _ in range(num_nodes)]
+        self.__jobs_allocation = []  # (<job>, <node_ids>)
+        self.__num_jobs_per_source = defaultdict(int)
+
+    @property
+    def num_idle_nodes(self):
+        """
+        Get the number of idle service nodes.
+
+        @return: Number of not busy nodes.
+        @rtype: int
+        """
+        return Counter(self.__nodes)[NodeState.Idle]
+
+    @property
+    def num_busy_nodes(self):
+        """
+        Get the number of busy service nodes.
+
+        @return: Number of busy nodes.
+        @rtype: int
+        """
+        return Counter(self.__nodes)[NodeState.Busy]
+
+    @property
+    def num_processing_jobs(self):
+        """
+        Get the number of jobs to be processed.
+
+        @return: Number of jobs allocated to service nodes.
+        @rtype: int
+        """
+        return len(self.__jobs_allocation)
 
     @property
     def next_release_timestamp(self):
         """
         Get the closest (to the current time) timestamp.
 
-        @return: Minimum timestamp.
+        @return: Minimum (release) timestamp.
         @rtype: float
         """
-        output = 0.
+        if self.__jobs_allocation:
+            return self.__jobs_allocation[0][0].release_timestamp
 
-        for node in self.__nodes:
-            if (node.is_locked and node.release_timestamp and
-                    (node.release_timestamp < output or not output)):
-                output = node.release_timestamp
+    def get_scheduled_release_timestamps(self):
+        """
+        Get timestamps when each busy node will release the job.
+
+        @return: Map of node ids with corresponding scheduled release timestamp.
+        @rtype: dict
+        """
+        output = {}
+
+        for job, node_ids in self.__jobs_allocation:
+            release_timestamp = job.scheduled_release_timestamp
+            output.update(dict(map(lambda x: (x, release_timestamp), node_ids)))
 
         return output
 
-    def run_service_node(self, current_time, job):
+    def ready_for_processing(self, job):
         """
-        Get the idle service node and assign the job to it.
+        Check availability of nodes to start the job processing.
 
-        @param current_time: Current time (timestamp from 0 to now).
-        @type current_time: float
         @param job: Job object.
-        @type job: qss.core.job.JobSpecs
+        @type job: qss.core.job.Job
+        @return: Flag that job processing can be started.
+        @rtype: bool
         """
-        for node in self.__nodes:
-            if not node.is_locked:
-                node.lock(current_time=current_time, job=job)
-                break
+        output = True
 
-    def release_service_node(self, current_time):
+        if self.num_idle_nodes < job.num_nodes:
+            output = False
+
+        return output
+
+    def start_processing(self, job, current_time):
         """
-        Release service node that is scheduled for the current timestamp.
+        Assign job to the defined number of idle nodes for processing.
 
+        @param job: Job object.
+        @type job: qss.core.job.Job
         @param current_time: Current time (timestamp from 0 to now).
         @type current_time: float
         """
-        for node in self.__nodes:
-            if node.release_timestamp == current_time:
-                node.unlock()
+        if self.num_idle_nodes < job.num_nodes:
+            raise Exception('The number of requested nodes exceeds ' +
+                            'the number of idle nodes.')
 
-    @property
-    def all_locked(self):
+        node_ids = []
+        for node_id, node_state in enumerate(self.__nodes):
+            if node_state == NodeState.Idle:
+                self.__nodes[node_id] = NodeState.Busy
+                node_ids.append(node_id)
+                if len(node_ids) == job.num_nodes:
+                    break
+
+        job.submission_timestamp = current_time
+        self.__jobs_allocation.append((job, node_ids))
+        self.__jobs_allocation.sort(key=lambda x: x[0].release_timestamp)
+        self.__increase_num_jobs_per_source(source=job.source)
+
+    def stop_processing(self, current_time):
         """
-        Check if all service nodes are locked.
+        Release scheduled service nodes and get finished jobs.
 
-        @return: Flag that all nodes are locked.
-        @rtype: bool
+        @param current_time: Current time (timestamp from 0 to now).
+        @type current_time: float
+        @return: Finished (processed) jobs.
+        @rtype: list
         """
-        output = True
+        output = []
 
-        for node in self.__nodes:
-            if not node.is_locked:
-                output = False
-                break
+        while current_time == self.next_release_timestamp:
+
+            job, node_ids = self.__jobs_allocation.pop(0)
+            output.append(job)
+            self.__decrease_num_jobs_per_source(source=job.source)
+
+            for node_id in node_ids:
+                self.__nodes[node_id] = NodeState.Idle
 
         return output
 
-    @property
-    def all_unlocked(self):
+    def assign_processing(self, job, node_ids, current_time):
         """
-        Check if there is at least one service node that is locked.
+        Assign job to the defined nodes according to the provided ids.
 
-        @return: Flag that all nodes are unlocked.
-        @rtype: bool
+        @param job: Job object.
+        @type job: qss.core.job.Job
+        @param node_ids: List of ids of the requested nodes.
+        @type node_ids: list
+        @param current_time: Current time (timestamp from 0 to now).
+        @type current_time: float
         """
-        output = True
+        if len(node_ids) != job.num_nodes:
+            raise Exception('The number of requested nodes does not ' +
+                            'correspond to the number of provided nodes.')
 
-        for node in self.__nodes:
-            if node.is_locked:
-                output = False
+        failed_node_id = None
+        for node_id in node_ids:
+
+            if self.__nodes[node_id] == NodeState.Busy:
+                failed_node_id = node_id
                 break
 
-        return output
+            self.__nodes[node_id] = NodeState.Busy
 
-    @property
-    def num_locked_nodes(self):
-        """
-        Get the number of working service nodes (locked nodes).
+        if failed_node_id:
+            for node_id in node_ids[:node_ids.index(failed_node_id)]:
+                self.__nodes[node_id] = NodeState.Idle
+            raise Exception('Already busy (assigned) node was requested again.')
 
-        @return: Number of locked nodes.
-        @rtype: int
+        job.submission_timestamp = current_time
+        self.__jobs_allocation.append((job, node_ids))
+        self.__jobs_allocation.sort(key=lambda x: x[0].release_timestamp)
+        self.__increase_num_jobs_per_source(source=job.source)
+
+    def reset(self):
         """
-        return len(filter(lambda x: x.is_locked, self.__nodes))
+        Reset all service nodes (set nodes to the idle state).
+        """
+        if self.num_busy_nodes:
+            for node_id, node_state in enumerate(self.__nodes):
+                if node_state == NodeState.Busy:
+                    self.__nodes[node_id] = NodeState.Idle
+
+        del self.__jobs_allocation[:]
+        self.__num_jobs_per_source.clear()
+
+    def __increase_num_jobs_per_source(self, source):
+        """
+        Increase the number of jobs from the specific source.
+
+        @param source: Source name of the job.
+        @type source: str
+        """
+        self.__num_jobs_per_source[source] += 1
+
+    def __decrease_num_jobs_per_source(self, source):
+        """
+        Decrease the number of jobs from the specific source.
+
+        @param source: Source name of the job.
+        @type source: str
+        """
+        if source in self.__num_jobs_per_source:
+            self.__num_jobs_per_source[source] -= 1
+
+            if not self.__num_jobs_per_source[source]:
+                del self.__num_jobs_per_source[source]
+
+    def get_num_jobs_with_source_names(self):
+        """
+        Get the number of jobs with corresponding source names.
+
+        @return: Pairs of source names and the corresponding number of jobs.
+        @rtype: tuple(str, int)
+        """
+        return self.__num_jobs_per_source.items()
